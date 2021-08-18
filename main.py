@@ -6,12 +6,12 @@
 @Author  :   Guo Jianhao 
 '''
 
-
+#comment these
 import pandas as pd
 from torch_geometric.data import Data
 from torch_geometric.utils import to_undirected
 from torch_geometric.datasets import TUDataset
-
+#comment these
 
 import os
 import copy
@@ -28,7 +28,7 @@ from tensorboardX import SummaryWriter
 
 from utils import *
 from model import MyModel
-from elliptic import Elliptic
+from dataset import Elliptic, Digg, UCI
 
 # def process(raw_dir):
 #     file_features = os.path.join(raw_dir,'elliptic_txs_features.csv')
@@ -93,10 +93,12 @@ if __name__ == '__main__':
     #Init dataloader
     # data = Elliptic(root='dataset/elliptic_bitcoin_dataset')
     
-    data = TUDataset(root='ENZYMES', name='ENZYMES')
+    #data = TUDataset(root='ENZYMES', name='ENZYMES')
+
+    data = UCI(root='dataset/UCI')
     loader = DataLoader(data, batch_size=1, shuffle=False)
     data =  [data_item.to(args.device) for data_item in loader]
-
+    print(len(data))
     #Init model
     model = MyModel(args)
     model = model.to(args.device)
@@ -109,18 +111,23 @@ if __name__ == '__main__':
     for epoch in tqdm(range(args.epochs)):
         train_loss = 0.0
         optimizer.zero_grad()
-        out = model(data)
+       
         #supervised
-        y = torch.empty(0).to(args.device)
-        for data_item in data:
-            y = torch.cat((y,data_item.y), 0).long()
-        loss = F.nll_loss(out, y)
+        # out = model(data)
+        # y = torch.empty(0).to(args.device)
+        # for data_item in data:
+        #     y = torch.cat((y,data_item.y), 0).long()
+        # loss = F.nll_loss(out, y)
+
+        #unsupervised
+        loss, acc, hidden = model(data)
         loss.backward()
         optimizer.step()
         train_loss = loss.item()
-        out_log.append([F.softmax(out, dim=1), y])
+        # out_log.append([F.softmax(out, dim=1), y])
         #evaluate on validation set after every x epoch
         print(f'train_loss: {train_loss:.4f}')
+        print(f'train_acc: {acc:.4f}')
     
     #evaluate on test set after completing training
 

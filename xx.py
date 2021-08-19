@@ -1,16 +1,14 @@
-import torch.nn as nn
 import torch
-import numpy as np
+import torch.nn as nn
+import torch.nn.functional as F
 
-softmax=nn.Softmax(dim=0)
-logsoftmax=nn.LogSoftmax(dim=0)
-input=torch.randn(2,1)
-
-# input=Variable(torch.Tensor(input))
-
-out1 = softmax(input)
-out2 = logsoftmax(input)
-print(torch.argmax(out1,dim=0))
-print(torch.sum(torch.eq(torch.argmax(out1,dim=0),0)))
-print(out1)
-print(out2)
+i1 = torch.randn(5,8,2)
+i2 = torch.randn(2)
+print(i1)
+print(i2)
+for i in range(5):
+    total = []
+    print(F.cosine_similarity(i1[i],i2,dim=-1))
+    for j in range(8):
+        total.append(F.cosine_similarity(i1[i][j],i2,dim = 0))
+    print(total)

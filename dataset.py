@@ -6,8 +6,7 @@ import pandas as pd
 from torch._C import dtype
 from torch_geometric.utils import to_undirected
 from torch_geometric.data import Data, InMemoryDataset, download_url, extract_zip, extract_tar
-from preprocess import preprocess
-from utils import from_networkx
+from preprocess import preprocess, from_networkx
 
 class Elliptic(InMemoryDataset):
     r"""
@@ -134,13 +133,11 @@ class UCI(InMemoryDataset):
         graphs = np.load(os.path.join(self.raw_dir, "graphs.npz"), allow_pickle=True)['graph']
         features = np.load(os.path.join(self.raw_dir, "features.npz"), allow_pickle=True)['feats']
  
-
         # adj_matrices = map(lambda x: nx.adjacency_matrix(x), graphs)
 
         data_list = []
-        
-        for i, graph in enumerate(graphs):
-            data = from_networkx(graph, features[i], group_edge_attrs=['date'])
+        for i,_ in enumerate(graphs):
+            data = from_networkx(graphs[i], features[i], group_edge_attrs=['date'])
             data_list.append(data)
 
         if self.pre_filter is not None:

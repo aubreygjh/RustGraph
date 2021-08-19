@@ -7,6 +7,7 @@
 '''
 
 #comment these
+from logging import raiseExceptions
 import pandas as pd
 from torch_geometric.data import Data
 from torch_geometric.utils import to_undirected
@@ -94,11 +95,14 @@ if __name__ == '__main__':
     # data = Elliptic(root='dataset/elliptic_bitcoin_dataset')
     
     #data = TUDataset(root='ENZYMES', name='ENZYMES')
-
-    data = UCI(root='dataset/UCI')
-    loader = DataLoader(data, batch_size=1, shuffle=False)
-    data =  [data_item.to(args.device) for data_item in loader]
-    print(len(data))
+    data = []
+    if args.dataset == 'uci':
+        data = UCI(root='dataset/UCI')
+        loader = DataLoader(data, batch_size=1, shuffle=False)
+        data =  [data_item.to(args.device) for data_item in loader]
+    else:
+        exit('Error: Unspecified Dataset')
+    
     #Init model
     model = MyModel(args)
     model = model.to(args.device)

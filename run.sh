@@ -1,40 +1,43 @@
-DATASET=$1
-gpu_n=$2
-multigpu=0
-EPOCH=100
-LR=0.01
+gpu_n=$1
+dataset=$2
+multi_gpu=0
+epoch=50
+lr=0.01
+weight_decay=0.01
 num_layers=2
-seed=5
-BATCH_SIZE=32
-SLIDE_WIN=5
-dim=64
-out_layer_num=1
-SLIDE_STRIDE=1
-topk=5
-out_layer_inter_dim=128
-val_ratio=0.2
-decay=0
+add_ev=$3
+
+# seed=5
+# BATCH_SIZE=32
+# SLIDE_WIN=5
+# dim=64
+# out_layer_num=1
+# SLIDE_STRIDE=1
+# topk=5
+# out_layer_inter_dim=128
+# val_ratio=0.2
+
+# path_pattern="${DATASET}"
+# COMMENT="${DATASET}"
+# report='best'
 
 
-path_pattern="${DATASET}"
-COMMENT="${DATASET}"
-
-
-report='best'
-if [[ "$DATASET" == "uci" ]]; then
+if [[ "$dataset" == "uci" ]]; then
     CUDA_VISIBLE_DEVICES=$gpu_n python main.py \
-        --dataset $DATASET \
-        --multi_gpu $multigpu \
-        --epoch $EPOCH \
-        --lr $LR \
+        --dataset $dataset \
+        --multi_gpu $multi_gpu \
+        --epoch $epoch \
+        --lr $lr \
+        --weight_decay  $weight_decay \
         --num_layers $num_layers \
-        --in_channels 1809 \
-        --hidden_channels 256 \
-        --out_channels 256 \
+        --num_nodes 1809 \
+        --in_channels_gnn 1809 \
+        --hidden_channels_gnn 512 \
+        --out_channels_gnn 256 \
+        --add_ev $add_ev \
         --n_samples 8 \
         --timestamp 12 \
-        --num_classes 2
-    
+        --num_classes 2 
 fi
 
 # if [[ "$gpu_n" == "cpu" ]]; then

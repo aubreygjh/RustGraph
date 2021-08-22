@@ -28,7 +28,7 @@ from torch_geometric.nn import DataParallel
 from tensorboardX import SummaryWriter
 
 from utils import *
-from model import MyModel
+from model import MyModel, MLP
 from dataset import Elliptic, Digg, UCI
 
 # def process(raw_dir):
@@ -103,28 +103,30 @@ if __name__ == '__main__':
     else:
         exit('Error: Unspecified Dataset')
     
-    #Init model
-    model = MyModel(args)
-    model = model.to(args.device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
-    #Start training
+
+    #Init model
+    encoder = MyModel(args)
+    encoder = encoder.to(args.device)
+    optimizer = torch.optim.Adam(encoder.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+
+    #Start pre-training
     start_time = time.time()
-    model.train()    
+    encoder.train()    
     out_log = []
     for epoch in tqdm(range(args.epochs)):
         train_loss = 0.0
         optimizer.zero_grad()
        
         #supervised
-        # out = model(data)
+        # out = encoder(data)
         # y = torch.empty(0).to(args.device)
         # for data_item in data:
         #     y = torch.cat((y,data_item.y), 0).long()
         # loss = F.nll_loss(out, y)
 
         #unsupervised
-        loss, acc, hidden = model(data)
+        loss, acc, hidden = encoder(data)
         loss.backward()
         optimizer.step()
         train_loss = loss.item()
@@ -133,6 +135,7 @@ if __name__ == '__main__':
         print(f'train_loss: {train_loss:.4f}')
         print(f'train_acc: {acc:.4f}')
     
+
     #evaluate on test set after completing training
 
     logger.close()

@@ -132,12 +132,15 @@ class UCI(InMemoryDataset):
         preprocess(raw_file)
         graphs = np.load(os.path.join(self.raw_dir, "graphs.npz"), allow_pickle=True)['graph']
         features = np.load(os.path.join(self.raw_dir, "features.npz"), allow_pickle=True)['feats']
- 
+        
         # adj_matrices = map(lambda x: nx.adjacency_matrix(x), graphs)
-
+        anormaly = np.random.rand(len(graphs))
+        anormaly =[i < 0.1 for i in anormaly]
+        assert (len(graphs) == len(features) and len(graphs) == len(anormaly))
+        
         data_list = []
         for i,_ in enumerate(graphs):
-            data = from_networkx(graphs[i], features[i], group_edge_attrs=['date'])
+            data = from_networkx(graphs[i], features[i], anormaly[i], group_edge_attrs=['date'])
             data_list.append(data)
 
         if self.pre_filter is not None:

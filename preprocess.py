@@ -33,7 +33,6 @@ def remap(slices_graph, slices_features):
             G.add_node(node_idx[x])
         for x in slices_graph[slice_id].edges(data=True):
             G.add_edge(node_idx[x[0]], node_idx[x[1]], date=x[2]['date'])
-            # G.add_edge(node_idx[x[0]], node_idx[x[1]])
 
         assert (len(G.nodes()) == len(slices_graph[slice_id].nodes()))
         assert (len(G.edges()) == len(slices_graph[slice_id].edges()))
@@ -125,7 +124,8 @@ def preprocess(raw_file):
         if a not in slices_links[slice_id]:
             slices_links[slice_id].add_node(a)
         if b not in slices_links[slice_id]:
-            slices_links[slice_id].add_node(b)    
+            slices_links[slice_id].add_node(b) 
+        # slices_links[slice_id].add_edge(a,b, date=datetime_object)   
         slices_links[slice_id].add_edge(a,b, date=tm.mktime(datetime_object.timetuple()))
 
 
@@ -145,12 +145,13 @@ def preprocess(raw_file):
     np.savez('dataset/UCI/raw/features.npz', feats=slices_features_remap)
 
 
-def from_networkx(G, x, group_node_attrs=None,group_edge_attrs = None):
+def from_networkx(G, x, anormaly, group_node_attrs=None,group_edge_attrs = None):
     r"""Converts a :obj:`networkx.Graph` or :obj:`networkx.DiGraph` to a
     :class:`torch_geometric.data.Data` instance.
 
     Args:
         G (networkx.Graph or networkx.DiGraph): A networkx graph.
+        anormaly (bool) : whether or not to add anormaly to current graph
         group_node_attrs (List[str] or all, optional): The node attributes to
             be concatenated and added to :obj:`data.x`. (default: :obj:`None`)
         group_edge_attrs (List[str] or all, optional): The edge attributes to
@@ -167,8 +168,6 @@ def from_networkx(G, x, group_node_attrs=None,group_edge_attrs = None):
     G = nx.convert_node_labels_to_integers(G)
     # G = G.to_directed() if not nx.is_directed(G) else G
     edge_index = torch.LongTensor(list(G.edges())).t().contiguous()
-    
-
     data = {}
 
     if G.number_of_nodes() > 0:
@@ -218,4 +217,18 @@ def from_networkx(G, x, group_node_attrs=None,group_edge_attrs = None):
         edge_attrs = [data[key] for key in group_edge_attrs]
         edge_attrs = [x.view(-1, 1) if x.dim() <= 1 else x for x in edge_attrs]
         data.edge_attr = torch.cat(edge_attrs, dim=-1)
+
+    #For anormaly injection, random select 1% edges and duplicate it 30 times
+    if anormaly:
+        edges = data.edge_index.shape[1]
+        for i in range(max(1, int(0.01*edges))):
+            idx = np.random.randint(edges)
+            abnormal_edge_index = data.edge_index[:,idx].view(2,1).expand(2, 30)
+            data.edge_index = torch.cat((data.edge_index, abnormal_edge_index), dim=1)
+            abnormal_edge_attrs = data.edge_attr[idx].view(1,-1).expand(30, -1)
+            data.edge_attr = torch.cat((data.edge_attr,abnormal_edge_attrs), dim=0)
+        data['y'] = torch.tensor([1])
+    else:
+        data['y'] = torch.tensor([0])
+
     return data

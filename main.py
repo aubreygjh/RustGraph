@@ -26,6 +26,7 @@ import torch.nn.functional as F
 from torch_geometric.data import DataLoader, DataListLoader
 from torch_geometric.nn import DataParallel
 from tensorboardX import SummaryWriter
+from sklearn.metrics import roc_auc_score
 
 from utils import *
 from model import MyModel, MLP
@@ -87,7 +88,7 @@ from dataset import Elliptic, Digg, UCI
 
 
 if __name__ == '__main__':
-    logger = SummaryWriter('logs')
+    # logger = SummaryWriter('logs')
     args = args_parser()
     exp_details(args)
 
@@ -100,10 +101,9 @@ if __name__ == '__main__':
         data = UCI(root='dataset/UCI')
         loader = DataLoader(data, batch_size=1, shuffle=False)
         data =  [data_item.to(args.device) for data_item in loader]
+        labels = torch.tensor([data_item['y'].item() for data_item in loader]).to(args.device)
     else:
         exit('Error: Unspecified Dataset')
-    
-
 
     #Init model
     encoder = MyModel(args)
@@ -113,30 +113,37 @@ if __name__ == '__main__':
     #Start pre-training
     start_time = time.time()
     encoder.train()    
-    out_log = []
     for epoch in tqdm(range(args.epochs)):
-        train_loss = 0.0
         optimizer.zero_grad()
-       
-        #supervised
-        # out = encoder(data)
-        # y = torch.empty(0).to(args.device)
-        # for data_item in data:
-        #     y = torch.cat((y,data_item.y), 0).long()
-        # loss = F.nll_loss(out, y)
-
         #unsupervised
         loss, acc, hidden = encoder(data)
         loss.backward()
         optimizer.step()
-        train_loss = loss.item()
-        # out_log.append([F.softmax(out, dim=1), y])
-        #evaluate on validation set after every x epoch
-        print(f'train_loss: {train_loss:.4f}')
+        print(f'train_loss: {loss.item():.4f}')
         print(f'train_acc: {acc:.4f}')
     
 
-    #evaluate on test set after completing training
+    # classifier = MLP(256, 64, 2)
+    # classifier = classifier.to(args.device)
+    # optimizer = torch.optim.Adam(classifier.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    # # criterion = torch.nn.NLLLoss().to(args.device)
+    # criterion = torch.nn.CrossEntropyLoss().to(args.device)
+    # classifier.train()
+    # for epoch in tqdm(range(1000)):
+    #     optimizer.zero_grad()
+    #     _, _, hidden=encoder(data)
+    #     hidden = hidden.view(-1, 256)
+    #     out = classifier(hidden)   
+    #     loss = criterion(out, labels)
+    #     loss.backward()
+    #     optimizer.step()
+    #     y_true = copy.deepcopy(labels).cpu().numpy()
+    #     y_score = out[:,0].cpu().detach().numpy()
+    #     auc = roc_auc_score(y_true, y_score)
+    #     print(f'Loss: {loss.item():.4f}')
+    #     print(f'Auc: {auc:.4f}')
+        
 
-    logger.close()
+        
+    # logger.close()
     print('\n Total Training Rime:{0:0.4f}'.format(time.time()-start_time))

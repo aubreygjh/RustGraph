@@ -41,6 +41,7 @@ class MyModel(nn.Module):
         self.rnn = nn.GRU(
                 input_size=self.in_channels_rnn,
                 hidden_size=self.out_channels_rnn,
+                batch_first=True,
                 )
         self.lsoftmax = nn.LogSoftmax(dim=0)
         self.softmax = nn.Softmax(dim=0)
@@ -86,8 +87,8 @@ class MyModel(nn.Module):
                 x = torch.cat((x, eigen_vector),dim=1)    
             last_l_seq.append(x)
         z = torch.stack(last_l_seq)
-        z = z.transpose(0,1) #(B, L, C) : (1, 600, 3)
-
+        z = z.transpose(0,1) #(B, L, C) : (1, 600, 512)
+        
         nce = 0
         correct = 0
         cnt = 0
@@ -100,22 +101,22 @@ class MyModel(nn.Module):
             cnt+=1
             encode_samples = torch.empty((self.timestamp, self.n_samples, feat_dim)).float() #e.g. (12,8,512)
             for i in np.arange(1, self.timestamp+1):
-                encode_samples[i-1][0] = z[:,t_sample+i,:].view(feat_dim) #first is postive sample
+                encode_samples[i-1][0] = z[:,t_sample+i,:].view(feat_dim) #first is postive sample ,(1,1,512)
                 for j in np.arange(1, self.n_samples):
-                    encode_samples[i-1][j] = z[:,t_sample+i+neg_dist+j-1,:].view(feat_dim) #others are negative samples(selected 48 steps away)
+                    encode_samples[i-1][j] = z[:,t_sample+i+neg_dist+j-1,:].view(feat_dim) #others are negative samples(selected 48 steps away) (1,7,512)
             encode_samples=encode_samples.to(self.args.device)
-            forward_seq = z[:,:t_sample+1,:] #e.g. (1,100,512)
-            output, hidden = self.rnn(forward_seq, None) #output e.g. (1,100,512)
-            c_t = output[:,t_sample,:].view(feat_dim) #takes the last of output as c_t e.g. (512)
-            
+            #forward_seq = z[:,:t_sample+1,:] #e.g. (1,t_sample,512)
+            forward_seq = z #e.g. (1, 600, 512)
+            output, _ = self.rnn(forward_seq, None) #output e.g. (1,600,512) hidden e.g. (1,1,512)
+            c_t = output[:,t_sample,:].view(feat_dim) #takes the last of output as c_t e.g. (512)   
             for i in np.arange(0, self.timestamp):
-                #total = torch.mm(encode_samples[i], torch.transpose(c_t,0,1)) #e.g. (n_samples, 1)   cosine???????
-                total = F.cosine_similarity(encode_samples[i], c_t,dim=-1)
+                #total = torch.mm(encode_samples[i], torch.transpose(c_t,0,1))    cosine?
+                total = F.cosine_similarity(encode_samples[i], c_t,dim=-1) #e.g. (n_samples)
                 correct += torch.sum(torch.eq(torch.argmax(self.softmax(total),dim=0),0))
                 nce += self.lsoftmax(total)[0]
         nce /= -1.*cnt*self.timestamp
         acc = 1.*correct.item()/(cnt*self.timestamp)
-        return nce, acc, hidden
+        return nce, acc, output
         
 
 
@@ -134,4 +135,5 @@ class MLP(nn.Module):
         x = self.dropout(x)
         x = self.relu(x)
         x = self.layer_hidden(x)
-        return x.log_softmax(dim=-1)     
+        return x
+        # return x.log_softmax(dim=-1)     

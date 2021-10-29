@@ -9,14 +9,26 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.nn.modules import loss
 from torch_geometric.nn import global_max_pool 
-from torch_geometric.nn import SAGEConv
+from torch_geometric.nn import SAGEConv, GCNConv, GAE
 from torch_geometric.utils import get_laplacian, to_scipy_sparse_matrix
 import numpy as np
 from scipy.sparse.linalg import eigs, eigsh
+
+class GCNEncoder(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super().__init__()
+        self.conv1 = GCNConv(in_channels, 2 * out_channels)
+        self.conv2 = GCNConv(2 * out_channels, out_channels)
+
+    def forward(self, x, edge_index):
+        x = self.conv1(x, edge_index).relu()
+        return self.conv2(x, edge_index)
+
 class MyModel(nn.Module):
     def __init__(self, args):
-        super(MyModel,self).__init__()
+        super(MyModel, self).__init__()
         self.args = args
         #GNN's hyper-parameters
         self.num_layers = args.num_layers
@@ -38,15 +50,15 @@ class MyModel(nn.Module):
         self.convs = nn.ModuleList()
         self.convs.append(SAGEConv(self.in_channels_gnn, self.hidden_channels_gnn))
         self.convs.append(SAGEConv(self.hidden_channels_gnn, self.out_channels_gnn))
-        self.rnn = nn.GRU(
-                input_size=self.in_channels_rnn,
-                hidden_size=self.out_channels_rnn,
-                batch_first=True,
-                )
+        self.projection = nn.Linear(in_features=self.out_channels_gnn, out_features=self.out_channels_gnn)
+
+        self.rnn = nn.GRU(input_size=self.in_channels_rnn, hidden_size=self.out_channels_rnn, batch_first=True)
+        self.gae = GAE(GCNEncoder(self.in_channels_gnn, self.out_channels_gnn))
+        self.mse = nn.MSELoss()
         self.lsoftmax = nn.LogSoftmax(dim=0)
         self.softmax = nn.Softmax(dim=0)
 
-    def compute_ev(self,data,normalization=None, is_undirected=False):
+    def compute_ev(self, data, normalization=None, is_undirected=False):
         assert normalization in [None, 'sym', 'rw'], 'Invalid normalization'
         edge_weight = data.edge_attr
         if edge_weight is not None and edge_weight.numel() != data.num_edges:
@@ -81,14 +93,31 @@ class MyModel(nn.Module):
                 if i != self.num_layers - 1:
                     x = x.relu()
                     x = F.dropout(x, p=0.5, training=self.training)
-            x = global_max_pool(x,batch)
+            x = global_max_pool(x, batch)   #(B, C) : (1, 256)
             if self.args.add_ev:
                 eigen_vector = self.compute_ev(data).to(self.args.device)
-                x = torch.cat((x, eigen_vector),dim=1)    
+                x = torch.cat((x, eigen_vector), dim=1) 
+            #Additional projecter
+            x = self.projection(x)
             last_l_seq.append(x)
         z = torch.stack(last_l_seq)
-        z = z.transpose(0,1) #(B, L, C) : (1, 600, 512)
-        
+        z = z.transpose(0,1)    #(B, L, C) : (1, 600, 512)
+        global_mean = z.mean(1).view(self.out_channels_gnn) #(C)
+
+
+        #Generative
+        lossA = 0
+        lossB = 0
+        rnn_out, hidden = self.rnn(z, None)
+        for t in range(seq_len):
+            z_t = z[:,t,:].view(self.out_channels_gnn)
+            lossA += self.mse(z_t, global_mean)
+
+            h_t = rnn_out[:,t,:].view(self.out_channels_rnn, 1)
+
+
+
+        #Contrastive
         nce = 0
         correct = 0
         cnt = 0
@@ -121,19 +150,20 @@ class MyModel(nn.Module):
 
 
 class MLP(nn.Module):
-    def __init__(self, in_channels, hidden_channels, out_channels):
+    def __init__(self, in_channels, out_channels):
         super(MLP, self).__init__()
-        self.layer_input = nn.Linear(in_channels, hidden_channels)
-        self.dropout = nn.Dropout()
-        self.relu = nn.ReLU()
-        self.layer_hidden = nn.Linear(hidden_channels, out_channels)
+        self.linear = nn.Sequential(
+            nn.Linear(in_channels, in_channels // 4),
+            nn.Dropout(),
+            nn.ReLU(),
+            nn.Linear(in_channels // 4, in_channels // 16),
+            nn.Dropout(),
+            nn.ReLU(),
+            nn.Linear(in_channels // 16, out_channels)
+        )
         self.softmax = nn.Softmax(dim=1)
 
     def forward(self, x):
-        #x = x.view(-1, x.shape[1]*x.shape[-2]*x.shape[-1])
-        x = self.layer_input(x)
-        x = self.dropout(x)
-        x = self.relu(x)
-        x = self.layer_hidden(x)
-        return x
-        # return x.log_softmax(dim=-1)     
+        x = self.linear(x)
+        return x, self.softmax(x)
+     

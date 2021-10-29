@@ -7,30 +7,19 @@ from torch_geometric.nn import SAGEConv
 from torch_geometric.utils import get_laplacian, to_scipy_sparse_matrix
 import numpy as np
 from scipy.sparse.linalg import eigs, eigsh
-
-def compute_ev(data,normalization=None, is_undirected=False):
-    assert normalization in [None, 'sym', 'rw'], 'Invalid normalization'
-    edge_weight = data.edge_attr
-    if edge_weight is not None and edge_weight.numel() != data.num_edges:
-        edge_weight = None
-    edge_index, edge_weight = get_laplacian(data.edge_index, edge_weight,
-                                            normalization,
-                                            num_nodes=data.num_nodes)
-    L = to_scipy_sparse_matrix(edge_index, edge_weight, data.num_nodes)
-    eig_fn = eigs
-    if is_undirected and normalization != 'rw':
-        eig_fn = eigsh
-    lambda_max,ev = eig_fn(L, k=1, which='LM', return_eigenvectors=True)
-    return ev #eigen_vectors of shape(dim, k); dim=length of matrix, k=top-k vectors
-
-e1 = torch.tensor([[0,0,1,2],[1,2,0,0]])
-print(e1.shape)
-x1 = torch.tensor([[1],[1]])
-x2 = torch.tensor([[1],[1],[1]])
-x3 = torch.tensor([[1],[1],[1],[1]])
-print(e1.shape)
-g1 = data.Data(x = x3,edge_index=e1)
-ev = compute_ev(g1)
-print(ev)
-
-
+import networkx as nx
+import matplotlib.pyplot as plt  
+def draw(edge_index, y, name=None):
+    G = nx.MultiGraph(node_size=15, font_size=8)
+    src = edge_index[0].cpu().numpy()
+    dst = edge_index[1].cpu().numpy()
+    edgelist = zip(src, dst)
+    for i, j in edgelist:
+        G.add_edge(i, j)
+    plt.figure(figsize=(20, 14)) # 设置画布的大小
+    if y == 1:
+        nx.draw_networkx(G,node_color="red")
+    else:
+        nx.draw_networkx(G,node_color="blue")
+    plt.savefig('figs/{}.png'.format(name if name else 'path'))
+    print(f'Saved fig-{name}.')

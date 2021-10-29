@@ -221,7 +221,7 @@ def from_networkx(G, x, anormaly, group_node_attrs=None,group_edge_attrs = None)
     #For anormaly injection, random select 1% edges and duplicate it 30 times
     if anormaly:
         edges = data.edge_index.shape[1]
-        for i in range(max(1, int(0.01*edges))):
+        for i in range(max(1, int(0.2*edges))):
             idx = np.random.randint(edges)
             abnormal_edge_index = data.edge_index[:,idx].view(2,1).expand(2, 30)
             data.edge_index = torch.cat((data.edge_index, abnormal_edge_index), dim=1)

@@ -135,9 +135,10 @@ class UCI(InMemoryDataset):
         
         # adj_matrices = map(lambda x: nx.adjacency_matrix(x), graphs)
         anormaly = np.random.rand(len(graphs))
-        anormaly =[i < 0.1 for i in anormaly]
+        # anormaly rate here
+        anormaly = [i <= 0.5 for i in anormaly]
         assert (len(graphs) == len(features) and len(graphs) == len(anormaly))
-        
+
         data_list = []
         for i,_ in enumerate(graphs):
             data = from_networkx(graphs[i], features[i], anormaly[i], group_edge_attrs=['date'])

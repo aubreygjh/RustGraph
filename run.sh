@@ -36,7 +36,7 @@ if [[ "$dataset" == "uci" ]]; then
         --out_channels_gnn 256 \
         --add_ev $add_ev \
         --n_samples 8 \
-        --timestamp 12 \
+        --timestamp 6 \
         --num_classes 2 
 fi
 

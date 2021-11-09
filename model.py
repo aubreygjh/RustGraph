@@ -9,54 +9,107 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn.modules import loss
-from torch_geometric.nn import global_max_pool 
-from torch_geometric.nn import SAGEConv, GCNConv, GAE
+from torch_geometric.nn import SAGEConv, GCNConv, GAE, global_max_pool
+from torch_geometric.nn.glob.glob import global_mean_pool
 from torch_geometric.utils import get_laplacian, to_scipy_sparse_matrix
 import numpy as np
 from scipy.sparse.linalg import eigs, eigsh
 
-class GCNEncoder(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        super().__init__()
-        self.conv1 = GCNConv(in_channels, 2 * out_channels)
-        self.conv2 = GCNConv(2 * out_channels, out_channels)
+class GConv(nn.Module):
+    def __init__(self, input_dim, hidden_dim, num_layers):
+        super(GConv, self).__init__()
+        self.num_layers = num_layers
+        self.layers = torch.nn.ModuleList()
+        self.activation = nn.PReLU(hidden_dim)
+        for i in range(num_layers):
+            if i == 0:
+                self.layers.append(SAGEConv(input_dim, hidden_dim))
+            else:
+                self.layers.append(SAGEConv(hidden_dim, hidden_dim))
 
-    def forward(self, x, edge_index):
-        x = self.conv1(x, edge_index).relu()
-        return self.conv2(x, edge_index)
+    def forward(self, data): 
+        x = data.x
+        edge_index = data.edge_index
+        batch = data.batch
+        for i, conv in enumerate(self.layers):
+            x = conv(x, edge_index)
+            if i != self.num_layers - 1:
+                x = self.activation(x)
+                x = F.dropout(x, p=0.5, training=self.training)
+        g = global_max_pool(x, batch)
+        
+        return x, g
 
-class MyModel(nn.Module):
+class GAE(nn.Module):
     def __init__(self, args):
-        super(MyModel, self).__init__()
-        self.args = args
-        #GNN's hyper-parameters
-        self.num_layers = args.num_layers
-        self.num_nodes = args.num_nodes
-        self.in_channels_gnn = args.in_channels_gnn
-        self.hidden_channels_gnn = args.hidden_channels_gnn
-        self.out_channels_gnn = args.out_channels_gnn
-        #RNN's hyper-parameters
-        if self.args.add_ev:
-            self.in_channels_rnn = args.out_channels_gnn + args.num_nodes
-            self.out_channels_rnn = args.out_channels_gnn + args.num_nodes
-        else:
-            self.in_channels_rnn = args.out_channels_gnn
-            self.out_channels_rnn = args.out_channels_gnn
-        #Contrastive Learning's hyper-parameters
-        self.n_samples = args.n_samples
-        self.timestamp = args.timestamp
-        #Network component
-        self.convs = nn.ModuleList()
-        self.convs.append(SAGEConv(self.in_channels_gnn, self.hidden_channels_gnn))
-        self.convs.append(SAGEConv(self.hidden_channels_gnn, self.out_channels_gnn))
-        self.projection = nn.Linear(in_features=self.out_channels_gnn, out_features=self.out_channels_gnn)
+        super().__init__()
 
-        self.rnn = nn.GRU(input_size=self.in_channels_rnn, hidden_size=self.out_channels_rnn, batch_first=True)
-        self.gae = GAE(GCNEncoder(self.in_channels_gnn, self.out_channels_gnn))
-        self.mse = nn.MSELoss()
+class CPC(nn.Module):
+    def __init__(self, device, input_dim, hidden_dim, sample_num, timespan):
+        super(CPC, self).__init__()
+        self.device = device
+        self.sample_num = sample_num
+        self.timespan = timespan
+        self.rnn = nn.GRU(input_dim, hidden_dim, batch_first=True)
         self.lsoftmax = nn.LogSoftmax(dim=0)
         self.softmax = nn.Softmax(dim=0)
+        
+
+    def forward(self, data): #shape: (B, L, C)
+        #parameters
+        seq_len = data.shape[1]
+        feat_dim = data.shape[2]
+        neg_dist = int(seq_len/6)
+        end = seq_len - self.sample_num - neg_dist - self.timespan + 2
+        start = int(seq_len/8) if int(seq_len/8) < end else 0
+        cnt = 0
+        nce = 0
+        correct = 0
+
+        z,_ = self.rnn(data, None) #shape: (B, L, C)
+        global_mean = np.squeeze(z.mean(1))
+        for t_sample in np.arange(start, end):   #better be [0: len(data))
+            cnt+=1
+            encode_samples = torch.empty((self.timespan, self.sample_num, feat_dim)).float().to(self.device)
+            for i in np.arange(1, self.timespan+1):
+                encode_samples[i-1][0] = data[:,t_sample+i,:].view(feat_dim)
+                for n_sample in np.arange(1, self.sample_num):
+                    encode_samples[i-1][n_sample] = data[:,t_sample+i+neg_dist+n_sample-1,:].view(feat_dim)
+            # encode_samples=encode_samples.to(self.args.device)
+            c_t = z[:,t_sample,:].view(feat_dim)
+            for i in np.arange(0, self.timespan):
+                total = F.cosine_similarity(encode_samples[i], c_t, dim=-1)
+                nce += self.lsoftmax(total)[0]
+                correct += torch.sum(torch.eq(torch.argmax(self.softmax(total),dim=0),0))
+        nce /= -1.*cnt*self.timespan
+        acc = 1.*correct.item()/(cnt*self.timespan)
+
+        return z, nce, acc
+
+class ENC(nn.Module):
+    def __init__(self, args):
+        super(ENC, self).__init__()
+        self.args = args
+        self.gnn_enc = GConv(args.input_dim_gconv, args.hidden_dim_gconv, args.num_layers_gconv).to(args.device)
+        self.cpc_enc = CPC(args.device, args.input_dim_rnn, args.hidden_dim_rnn, args.sample_num, args.timespan).to(args.device)
+        self.gae_enc = GAE(args).to(args.device)
+
+    def forward(self, dataloader): 
+        graph_embed_list = []
+        for t, data in enumerate(dataloader):
+            data = data.to(self.args.device)
+            x, g = self.gnn_enc(data)
+            #Use eigenvector as feature, may be deprecated later
+            # if self.args.add_ev:    
+            #     eigen_vector = self.compute_ev(data).to(self.args.device)
+            #     x = torch.cat((x, eigen_vector), dim=1) 
+            # g = self.projection(g)
+            graph_embed_list.append(g)
+        graph_embed_list = torch.stack(graph_embed_list).transpose(0, 1)
+        global_mean_pool = torch.squeeze(graph_embed_list.mean(1))
+        
+        z, nce, acc = self.cpc_enc(graph_embed_list)
+        return nce, acc
 
     def compute_ev(self, data, normalization=None, is_undirected=False):
         assert normalization in [None, 'sym', 'rw'], 'Invalid normalization'
@@ -80,73 +133,6 @@ class MyModel(nn.Module):
         ev = np.reshape(ev,(1,self.num_nodes))
         ev = torch.from_numpy(ev)
         return ev #eigen_vectors of shape(dim, k); dim=length of matrix, k=top-k vectors
-
-    def forward(self, data_list):
-        seq_len = len(data_list)
-        last_l_seq=[]
-        for t, data in enumerate(data_list):
-            x = data.x
-            edge_index = data.edge_index
-            batch = data.batch
-            for i, conv in enumerate(self.convs):
-                x = conv(x, edge_index)
-                if i != self.num_layers - 1:
-                    x = x.relu()
-                    x = F.dropout(x, p=0.5, training=self.training)
-            x = global_max_pool(x, batch)   #(B, C) : (1, 256)
-            if self.args.add_ev:
-                eigen_vector = self.compute_ev(data).to(self.args.device)
-                x = torch.cat((x, eigen_vector), dim=1) 
-            #Additional projecter
-            x = self.projection(x)
-            last_l_seq.append(x)
-        z = torch.stack(last_l_seq)
-        z = z.transpose(0,1)    #(B, L, C) : (1, 600, 512)
-        global_mean = z.mean(1).view(self.out_channels_gnn) #(C)
-
-
-        #Generative
-        lossA = 0
-        lossB = 0
-        rnn_out, hidden = self.rnn(z, None)
-        for t in range(seq_len):
-            z_t = z[:,t,:].view(self.out_channels_gnn)
-            lossA += self.mse(z_t, global_mean)
-
-            h_t = rnn_out[:,t,:].view(self.out_channels_rnn, 1)
-
-
-
-        #Contrastive
-        nce = 0
-        correct = 0
-        cnt = 0
-        feat_dim = z.shape[-1]
-        neg_dist = int(seq_len/6) #n-steps afterward are selected as negative samples
-        end = seq_len - self.n_samples - neg_dist - self.timestamp + 2
-        start = int(seq_len/8) if int(seq_len/8) < end else 0
-
-        for t_sample in np.arange(start, end): 
-            cnt+=1
-            encode_samples = torch.empty((self.timestamp, self.n_samples, feat_dim)).float() #e.g. (12,8,512)
-            for i in np.arange(1, self.timestamp+1):
-                encode_samples[i-1][0] = z[:,t_sample+i,:].view(feat_dim) #first is postive sample ,(1,1,512)
-                for j in np.arange(1, self.n_samples):
-                    encode_samples[i-1][j] = z[:,t_sample+i+neg_dist+j-1,:].view(feat_dim) #others are negative samples(selected 48 steps away) (1,7,512)
-            encode_samples=encode_samples.to(self.args.device)
-            #forward_seq = z[:,:t_sample+1,:] #e.g. (1,t_sample,512)
-            forward_seq = z #e.g. (1, 600, 512)
-            output, _ = self.rnn(forward_seq, None) #output e.g. (1,600,512) hidden e.g. (1,1,512)
-            c_t = output[:,t_sample,:].view(feat_dim) #takes the last of output as c_t e.g. (512)   
-            for i in np.arange(0, self.timestamp):
-                #total = torch.mm(encode_samples[i], torch.transpose(c_t,0,1))    cosine?
-                total = F.cosine_similarity(encode_samples[i], c_t,dim=-1) #e.g. (n_samples)
-                correct += torch.sum(torch.eq(torch.argmax(self.softmax(total),dim=0),0))
-                nce += self.lsoftmax(total)[0]
-        nce /= -1.*cnt*self.timestamp
-        acc = 1.*correct.item()/(cnt*self.timestamp)
-        return nce, acc, output
-        
 
 
 class MLP(nn.Module):

@@ -1,6 +1,5 @@
 gpu_n=$1
 dataset=$2
-multi_gpu=0
 epoch=50
 lr=0.01
 weight_decay=0.01
@@ -25,18 +24,18 @@ add_ev=$3
 if [[ "$dataset" == "uci" ]]; then
     CUDA_VISIBLE_DEVICES=$gpu_n python main.py \
         --dataset $dataset \
-        --multi_gpu $multi_gpu \
         --epoch $epoch \
         --lr $lr \
         --weight_decay  $weight_decay \
-        --num_layers $num_layers \
         --num_nodes 1809 \
-        --in_channels_gnn 1809 \
-        --hidden_channels_gnn 512 \
-        --out_channels_gnn 256 \
+        --num_layers_gconv $num_layers \
+        --input_dim_gconv 1809 \
+        --hidden_dim_gconv 256 \
+        --input_dim_rnn 256 \
+        --hidden_dim_rnn 256 \
         --add_ev $add_ev \
-        --n_samples 8 \
-        --timestamp 6 \
+        --sample_num 8 \
+        --timespan 6 \
         --num_classes 2 
 fi
 

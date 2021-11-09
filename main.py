@@ -20,60 +20,39 @@ from tensorboardX import SummaryWriter
 from sklearn.metrics import roc_auc_score
 
 from utils import *
-from model import MyModel, MLP
+from model import ENC, MLP
 from dataset import Elliptic, Digg, UCI
 
 
-import networkx as nx
-import matplotlib.pyplot as plt   
-def draw(edge_index, y, name=None):
-    G = nx.MultiGraph(node_size=15, font_size=8)
-    src = edge_index[0].cpu().numpy()
-    dst = edge_index[1].cpu().numpy()
-    edgelist = zip(src, dst)
-    for i, j in edgelist:
-        G.add_edge(i, j)
-    plt.figure(figsize=(20, 14)) # 设置画布的大小
-    if y == 1:
-        nx.draw_networkx(G,node_color="red")
-    else:
-        nx.draw_networkx(G,node_color="blue")
-    plt.savefig('figs/{}.png'.format(name if name else 'path'))
-    print(f'Saved fig-{name}.')
-
 if __name__ == '__main__':
+    start_time = time.time()
     logger = SummaryWriter()
     args = args_parser()
-    exp_details(args)
+    # exp_details(args)
 
     #Init dataloader
-    #data = Elliptic(root='dataset/elliptic_bitcoin_dataset')
-    #data = TUDataset(root='dataset/ENZYMES', name='ENZYMES')
-    data = []
+    dataset = []
     if args.dataset == 'uci':
-        data = UCI(root='dataset/UCI')
-        loader = DataLoader(data, batch_size=1, shuffle=False)
-        data =  [data_item.to(args.device) for data_item in loader]
-        labels = torch.tensor([data_item['y'].item() for data_item in loader]).to(args.device)
+        dataset = UCI(root='dataset/UCI')
+        dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
+        # labels = torch.tensor([data_item['y'].item() for data_item in loader]).to(args.device)
+    elif args.dataset == "elliptic":
+        data = Elliptic(root='dataset/elliptic_bitcoin_dataset')
     else:
         exit('Error: Unspecified Dataset')
-
-    # #visualize graphs
-    # for i,graph in enumerate(data):
-    #     draw(graph.edge_index, graph.y, i)
-
-    start_time = time.time()
-    #Init model
-    encoder = MyModel(args)
-    encoder = encoder.to(args.device)
-    optimizer = torch.optim.Adam(encoder.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     
+    #Init model
+    encoder = ENC(args).to(args.device)
+    optimizer = torch.optim.Adam(encoder.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    load_time = time.time()
+    print('\n Total Loading Rime:{0:0.4f}'.format(load_time-start_time))
+
     #Start pre-training
     encoder.train()    
     for epoch in tqdm(range(args.epochs)):
         optimizer.zero_grad()
         #unsupervised
-        loss, acc, hidden = encoder(data)
+        loss, acc = encoder(dataloader)
         loss.backward()
         optimizer.step()
         logger.add_scalar('pre-loss', loss.item(), epoch)
@@ -117,4 +96,4 @@ if __name__ == '__main__':
 
 
     logger.close()
-    print('\n Total Training Rime:{0:0.4f}'.format(time.time()-start_time))
+    print('\n Total Training Rime:{0:0.4f}'.format(time.time()-load_time))

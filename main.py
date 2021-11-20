@@ -6,21 +6,17 @@
 @Author  :   Guo Jianhao 
 '''
 import os
-import copy
 import time
-import pickle
 import numpy as np
 from tqdm import tqdm
-
+from torch.autograd import Variable
 import torch
-import torch.nn.functional as F
-from torch_geometric.data import DataLoader, DataListLoader
-from torch_geometric.nn import DataParallel
+from torch_geometric.data import DataLoader
 from tensorboardX import SummaryWriter
 from sklearn.metrics import roc_auc_score
 
 from utils import *
-from model import ENC, MLP
+from model import Model, MLP
 from dataset import Elliptic, Digg, UCI
 
 
@@ -40,24 +36,27 @@ if __name__ == '__main__':
         data = Elliptic(root='dataset/elliptic_bitcoin_dataset')
     else:
         exit('Error: Unspecified Dataset')
-    
+    nodes = np.load(os.path.join('dataset/UCI/raw', "nodes.npz"), allow_pickle=True)['nodes']
+    tensor_nodes = [Variable(torch.LongTensor(list(node))) for node in nodes]
+    adjs = np.load(os.path.join('dataset/UCI/raw', "adjmatrix.npz"), allow_pickle=True)['adj']
+    tensor_adjs = [Variable(torch.FloatTensor(list(adj))) for adj in adjs]
     #Init model
-    encoder = ENC(args).to(args.device)
-    optimizer = torch.optim.Adam(encoder.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    model = Model(args)#.to(args.device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     load_time = time.time()
     print('\n Total Loading Rime:{0:0.4f}'.format(load_time-start_time))
 
     #Start pre-training
-    encoder.train()    
+    model.train()    
     for epoch in tqdm(range(args.epochs)):
         optimizer.zero_grad()
-        #unsupervised
-        loss, acc = encoder(dataloader)
-        loss.backward()
+        with torch.autograd.set_detect_anomaly(True):
+            loss = model(dataloader, tensor_nodes, tensor_adjs)
+            loss.backward()
         optimizer.step()
         logger.add_scalar('pre-loss', loss.item(), epoch)
         print(f'train_loss: {loss.item():.4f}')
-        print(f'train_acc: {acc:.4f}')
+        # print(f'train_acc: {acc:.4f}')
     
 
     # #Start fine-tuning

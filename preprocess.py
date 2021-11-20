@@ -27,26 +27,42 @@ def remap(slices_graph, slices_features):
                 ctr += 1
     slices_graph_remap = []
     slices_features_remap = []
+    slices_nodes_remap = []
+    slices_adjacent_matrix_remap = []
     for slice_id in slices_graph:
         G = nx.MultiGraph()
         for x in slices_graph[slice_id].nodes():
             G.add_node(node_idx[x])
+
+        valid_node = set()
         for x in slices_graph[slice_id].edges(data=True):
+            valid_node.add(node_idx[x[0]])
+            valid_node.add(node_idx[x[1]])
             G.add_edge(node_idx[x[0]], node_idx[x[1]], date=x[2]['date'])
+        adjacent_matrix = np.identity(len(valid_node))
+        valid_node = list(valid_node)
+        valid_node_idx = dict(zip(valid_node, [i for i in range(len(valid_node))]))
+        for x in G.edges():
+            adjacent_matrix[valid_node_idx[x[0]]][valid_node_idx[x[1]]] += 1
+            adjacent_matrix[valid_node_idx[x[1]]][valid_node_idx[x[0]]] += 1
 
         assert (len(G.nodes()) == len(slices_graph[slice_id].nodes()))
         assert (len(G.edges()) == len(slices_graph[slice_id].edges()))
+        slices_nodes_remap.append(valid_node)
+        slices_adjacent_matrix_remap.append(adjacent_matrix)
         slices_graph_remap.append(G)
     
     for slice_id in slices_features:
         features_remap = []
-        for x in slices_graph_remap[slice_id].nodes():
-            features_remap.append(slices_features[slice_id][idx_node[x]])
-            #features_remap.append(np.array(slices_features[slice_id][idx_node[x]]).flatten())
+        for x in range(ctr):
+            if x in slices_graph_remap[slice_id].nodes():
+                features_remap.append(slices_features[slice_id][idx_node[x]])
+            else:
+                features_remap.append([0 for i in range(len(slices_graph[max(slices_graph.keys())].nodes()))])
         features_remap = np.squeeze(np.array(features_remap))
         # features_remap = csr_matrix(np.squeeze(np.array(features_remap))
         slices_features_remap.append(features_remap)
-    return (slices_graph_remap, slices_features_remap)
+    return (slices_graph_remap, slices_nodes_remap, slices_adjacent_matrix_remap, slices_features_remap)
 
 
 def preprocess(raw_file):
@@ -128,7 +144,6 @@ def preprocess(raw_file):
         # slices_links[slice_id].add_edge(a,b, date=datetime_object)   
         slices_links[slice_id].add_edge(a,b, date=tm.mktime(datetime_object.timetuple()))
 
-
     for slice_id in slices_links:
         print ("# nodes in slice", slice_id, len(slices_links[slice_id].nodes()))
         print ("# edges in slice", slice_id, len(slices_links[slice_id].edges()))
@@ -139,9 +154,11 @@ def preprocess(raw_file):
         for idx, node in enumerate(slices_links[slice_id].nodes()):
             slices_features[slice_id][node] = temp[idx]
     # TODO : remap and output.
-    slices_links_remap, slices_features_remap = remap(slices_links, slices_features)
+    slices_links_remap, slices_nodes_remap, slices_adj_remap, slices_features_remap = remap(slices_links, slices_features)
 
     np.savez('dataset/UCI/raw/graphs.npz', graph=slices_links_remap)
+    np.savez('dataset/UCI/raw/nodes.npz', nodes=slices_nodes_remap)
+    np.savez('dataset/UCI/raw/adjmatrix.npz', adj=slices_adj_remap)
     np.savez('dataset/UCI/raw/features.npz', feats=slices_features_remap)
 
 
@@ -165,7 +182,7 @@ def from_networkx(G, x, anormaly, group_node_attrs=None,group_edge_attrs = None)
     """
     
 
-    G = nx.convert_node_labels_to_integers(G)
+    # G = nx.convert_node_labels_to_integers(G)
     # G = G.to_directed() if not nx.is_directed(G) else G
     edge_index = torch.LongTensor(list(G.edges())).t().contiguous()
     data = {}

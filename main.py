@@ -37,11 +37,11 @@ if __name__ == '__main__':
     else:
         exit('Error: Unspecified Dataset')
     nodes = np.load(os.path.join('dataset/UCI/raw', "nodes.npz"), allow_pickle=True)['nodes']
-    tensor_nodes = [Variable(torch.LongTensor(list(node))) for node in nodes]
+    tensor_nodes = [Variable(torch.LongTensor(list(node)).to(args.device)) for node in nodes]
     adjs = np.load(os.path.join('dataset/UCI/raw', "adjmatrix.npz"), allow_pickle=True)['adj']
-    tensor_adjs = [Variable(torch.FloatTensor(list(adj))) for adj in adjs]
+    tensor_adjs = [Variable(torch.FloatTensor(list(adj)).to(args.device)) for adj in adjs]
     #Init model
-    model = Model(args)#.to(args.device)
+    model = Model(args).to(args.device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     load_time = time.time()
     print('\n Total Loading Rime:{0:0.4f}'.format(load_time-start_time))

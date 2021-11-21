@@ -6,9 +6,9 @@ from torch.autograd import Variable
 from torch_geometric.nn import SAGEConv
 
 class GConv(nn.Module):
-    def __init__(self, input_dim, output_dim, act = None, bias = True, dropout = 0.):
+    def __init__(self, input_dim, output_dim, device, act = None, bias = True, dropout = 0.):
         super(GConv, self).__init__()
-        self.conv = SAGEConv(input_dim, output_dim)
+        self.conv = SAGEConv(input_dim, output_dim).to(device)
         self.dropout = dropout
         self.act = act
     
@@ -35,22 +35,22 @@ class Graph_GRU(nn.Module):
         
         for i in range(layer_num):
             if i == 0:
-                self.weight_xz.append(GConv(input_size, hidden_size, bias=bias)) 
-                self.weight_hz.append(GConv(hidden_size, hidden_size, bias=bias)) 
-                self.weight_xr.append(GConv(input_size, hidden_size, bias=bias)) 
-                self.weight_hr.append(GConv(hidden_size, hidden_size, bias=bias)) 
-                self.weight_xh.append(GConv(input_size, hidden_size, bias=bias)) 
-                self.weight_hh.append(GConv(hidden_size, hidden_size, bias=bias)) 
+                self.weight_xz.append(GConv(input_size, hidden_size, device=device, bias=bias)) 
+                self.weight_hz.append(GConv(hidden_size, hidden_size, device=device, bias=bias)) 
+                self.weight_xr.append(GConv(input_size, hidden_size, device=device, bias=bias)) 
+                self.weight_hr.append(GConv(hidden_size, hidden_size, device=device, bias=bias)) 
+                self.weight_xh.append(GConv(input_size, hidden_size, device=device, bias=bias)) 
+                self.weight_hh.append(GConv(hidden_size, hidden_size, device=device, bias=bias)) 
             else:
-                self.weight_xz.append(GConv(hidden_size, hidden_size, bias=bias)) 
-                self.weight_hz.append(GConv(hidden_size, hidden_size, bias=bias)) 
-                self.weight_xr.append(GConv(hidden_size, hidden_size, bias=bias)) 
-                self.weight_hr.append(GConv(hidden_size, hidden_size, bias=bias)) 
-                self.weight_xh.append(GConv(hidden_size, hidden_size, bias=bias)) 
-                self.weight_hh.append(GConv(hidden_size, hidden_size, bias=bias)) 
+                self.weight_xz.append(GConv(hidden_size, hidden_size, device=device, bias=bias)) 
+                self.weight_hz.append(GConv(hidden_size, hidden_size, device=device, bias=bias)) 
+                self.weight_xr.append(GConv(hidden_size, hidden_size, device=device, bias=bias)) 
+                self.weight_hr.append(GConv(hidden_size, hidden_size, device=device, bias=bias)) 
+                self.weight_xh.append(GConv(hidden_size, hidden_size, device=device, bias=bias)) 
+                self.weight_hh.append(GConv(hidden_size, hidden_size, device=device, bias=bias)) 
     
     def forward(self, x, edge_index, h):
-        h_out = torch.zeros(h.size())#.to(self.device)
+        h_out = torch.zeros(h.size()).to(self.device)
         for i in range(self.layer_num):
             if i == 0:
                 z_g = torch.sigmoid(self.weight_xz[i](x, edge_index) + self.weight_hz[i](h[i], edge_index))
@@ -73,9 +73,9 @@ class Generative(nn.Module):
         self.phi_x = nn.Sequential(nn.Linear(x_dim, h_dim), nn.ReLU())
         self.phi_z = nn.Sequential(nn.Linear(z_dim, h_dim), nn.ReLU())
         
-        self.enc = GConv(h_dim + h_dim, h_dim, act=F.relu)
-        self.enc_mean = GConv(h_dim, z_dim)
-        self.enc_std = GConv(h_dim, z_dim, act=F.softplus)
+        self.enc = GConv(h_dim + h_dim, h_dim, device=device, act=F.relu)
+        self.enc_mean = GConv(h_dim, z_dim, device=device)
+        self.enc_std = GConv(h_dim, z_dim, device=device, act=F.softplus)
         
         self.prior = nn.Sequential(nn.Linear(h_dim, h_dim), nn.ReLU())
         self.prior_mean = nn.Sequential(nn.Linear(h_dim, z_dim))
@@ -90,11 +90,9 @@ class Generative(nn.Module):
         enc_x = self.enc(torch.cat([phiX, h[-1]], 1), edge_index)
         enc_x_mean = self.enc_mean(enc_x, edge_index)
         enc_x_std = self.enc_std(enc_x, edge_index)
-        
         prior_x = self.prior(h[-1])
         prior_x_mean = self.prior_mean(prior_x)
         prior_x_std = self.prior_std(prior_x)
-
         z = self.random_sample(enc_x_mean, enc_x_std)
         phiZ = self.phi_z(z)
         h_out = self.rnn(torch.cat([phiX, phiZ], 1), edge_index, h)
@@ -102,8 +100,8 @@ class Generative(nn.Module):
         return (prior_x_mean, prior_x_std), (enc_x_mean, enc_x_std), z, h_out
     
     def random_sample(self, mean, std):
-        eps1 = torch.FloatTensor(std.size()).normal_()#.to(self.device)
-        eps1 = Variable(eps1)#.to(self.device)
+        eps1 = torch.FloatTensor(std.size()).normal_().to(self.device)
+        eps1 = Variable(eps1)
         return eps1.mul(std).add_(mean)
 
 
@@ -155,7 +153,7 @@ class CPC(nn.Module):
             #distance += F.pairwise_distance(z_pooling[i], global_mean)
         for t_sample in range(start, end):
             cnt += 1
-            encode_samples = torch.empty((self.timespan, self.sample_num, feat_dim)).float()#.to(self.device)
+            encode_samples = torch.empty((self.timespan, self.sample_num, feat_dim)).float().to(self.device)
             for i in np.arange(1, self.timespan+1):
                 encode_samples[i-1][0] = z_pooling[t_sample+i,:].view(feat_dim)
                 for n_sample in np.arange(1, self.sample_num):
@@ -172,7 +170,7 @@ class CPC(nn.Module):
         return nce_loss, distance        
     
     def graph_pooling(self, x, x_dim, z_dim):
-        x_out = torch.empty((len(x), z_dim)).float()#.to(self.device)
+        x_out = torch.empty((len(x), z_dim)).float().to(self.device)
         for i, x_t in enumerate(x):
             x_t = torch.mean(x_t, dim = 0)
             if x_dim == self.h_dim:
@@ -202,17 +200,18 @@ class Model(nn.Module):
         all_prior_mean, all_prior_std = [], []
         all_dec, all_z, all_h = [], [], []
         h_t = Variable(None)
+        # print(dataloader.__len__())
         for t, data in enumerate(dataloader):
-            #data = data.to(self.device)
+            data = data.to(self.device)
             x = data.x
             edge_index = data.edge_index
             nodes = all_time_nodes[t]
             adj = all_time_adj[t]
             if t == 0:
-                h_t = Variable(torch.zeros(self.layer_num, x.size(0), self.h_dim))#.to(self.device))
+                h_t = Variable(torch.zeros(self.layer_num, x.size(0), self.h_dim).to(self.device))
             
             (prior_mean_t, prior_std_t), (enc_mean_t, enc_std_t), z_t, h_t = self.conv(x, h_t, edge_index)
-            
+            print('mid: ', t)
             dec_t = self.dec(z_t)
             enc_mean_t_sl = enc_mean_t[nodes, :]
             enc_std_t_sl = enc_std_t[nodes, :]

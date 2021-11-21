@@ -149,7 +149,6 @@ class CPC(nn.Module):
             #print(global_mean.size())
             diff = torch.abs(z_pooling[i] - global_mean)
             distance += torch.sum(diff*diff)
-
             #distance += F.pairwise_distance(z_pooling[i], global_mean)
         for t_sample in range(start, end):
             cnt += 1
@@ -159,9 +158,9 @@ class CPC(nn.Module):
                 for n_sample in np.arange(1, self.sample_num):
                     encode_samples[i-1][n_sample] = z_pooling[t_sample+i+neg_dist+n_sample-1,:].view(feat_dim)
             c_t = h_pooling[t_sample,:].view(feat_dim)
-
             for i in np.arange(0, self.timespan):
-                c_phi_t = nn.Linear(feat_dim, feat_dim)(c_t)
+                linear = nn.Linear(feat_dim, feat_dim).to(self.device)
+                c_phi_t = linear(c_t)
                 total = F.cosine_similarity(encode_samples[i], c_phi_t, dim=-1)
                 nce_loss += self.lsoftmax(total)[0]
         nce_loss /= -1.*cnt*self.timespan
@@ -211,7 +210,7 @@ class Model(nn.Module):
                 h_t = Variable(torch.zeros(self.layer_num, x.size(0), self.h_dim).to(self.device))
             
             (prior_mean_t, prior_std_t), (enc_mean_t, enc_std_t), z_t, h_t = self.conv(x, h_t, edge_index)
-            print('mid: ', t)
+            # print('mid: ', t)
             dec_t = self.dec(z_t)
             enc_mean_t_sl = enc_mean_t[nodes, :]
             enc_std_t_sl = enc_std_t[nodes, :]

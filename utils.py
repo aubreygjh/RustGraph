@@ -42,9 +42,8 @@ def args_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument('--device', type=str, default='cuda:0', help='specify cuda devices')
     parser.add_argument('--dataset', type=str, default='uci', help='name of dataset')
-    # parser.add_argument('--multi_gpu', type=str2bool, default=False, help='multi-gpu mode')
-    parser.add_argument('--epochs', type=int, default=50, help='training epochs')
-    parser.add_argument('--lr', type=float, default=0, help='learning rate')
+    parser.add_argument('--epochs', type=int, default=100, help='training epochs')
+    parser.add_argument('--lr', type=float, default=0.01, help='learning rate')
     parser.add_argument('--weight_decay', type=float, default=0.01, help='weight decay')
     
     parser.add_argument('--eps', type=float, default=0.2, help='eps')

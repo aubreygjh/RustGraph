@@ -9,9 +9,8 @@ import os
 import time
 import numpy as np
 from tqdm import tqdm
-from torch.autograd import Variable
 import torch
-from torch_geometric.data import DataLoader
+from torch_geometric.loader import DataLoader
 from tensorboardX import SummaryWriter
 from sklearn.metrics import roc_auc_score
 
@@ -22,8 +21,10 @@ from dataset import Elliptic, Digg, UCI
 
 if __name__ == '__main__':
     start_time = time.time()
-    logger = SummaryWriter()
     args = args_parser()
+    logger = SummaryWriter(logdir='runs/{}_lr{}_epoch{} '.format(time.strftime('%m-%d %H:%M:%S')
+                                                        , args.lr
+                                                        , args.epochs))
     # exp_details(args)
 
     #Init dataloader
@@ -37,9 +38,10 @@ if __name__ == '__main__':
     else:
         exit('Error: Unspecified Dataset')
     nodes = np.load(os.path.join('dataset/UCI/raw', "nodes.npz"), allow_pickle=True)['nodes']
-    tensor_nodes = [Variable(torch.LongTensor(list(node)).to(args.device)) for node in nodes]
+    tensor_nodes = [torch.LongTensor(np.array(node)).to(args.device) for node in nodes]
     adjs = np.load(os.path.join('dataset/UCI/raw', "adjmatrix.npz"), allow_pickle=True)['adj']
-    tensor_adjs = [Variable(torch.FloatTensor(list(adj)).to(args.device)) for adj in adjs]
+    tensor_adjs = [torch.FloatTensor(np.array(adj)).to(args.device) for adj in adjs]
+    
     #Init model
     model = Model(args).to(args.device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
@@ -51,12 +53,17 @@ if __name__ == '__main__':
     for epoch in tqdm(range(args.epochs)):
         optimizer.zero_grad()
         with torch.autograd.set_detect_anomaly(True):
-            loss = model(dataloader, tensor_nodes, tensor_adjs)
+            nll_loss, kld_loss, jsd_loss, regularizer = model(dataloader, tensor_nodes, tensor_adjs)
+            loss = nll_loss + kld_loss + args.lamda * (jsd_loss + args.eps * regularizer)
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 10)
         optimizer.step()
-        logger.add_scalar('pre-loss', loss.item(), epoch)
+        logger.add_scalar('nll_loss', nll_loss.item(), epoch)
+        logger.add_scalar('kld_loss', kld_loss.item(), epoch)
+        logger.add_scalar('jsd_loss', jsd_loss.item(), epoch)
+        logger.add_scalar('regularizer', regularizer.item(), epoch)
+        logger.add_scalar('loss', loss.item(), epoch)
         print(f'train_loss: {loss.item():.4f}')
-        # print(f'train_acc: {acc:.4f}')
     
 
     # #Start fine-tuning

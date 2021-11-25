@@ -1,3 +1,4 @@
+import random
 import numpy as np
 import torch
 import torch.nn as nn
@@ -117,6 +118,59 @@ class InnerProductDecoder(nn.Module):
         x = torch.mm(inp, x)
         return self.act(x)
 
+class Contrastive(nn.Module):
+    def __init__(self, device, sample_num, h_dim, z_dim, aug):
+        super(Contrastive, self).__init__()
+        self.device = device
+        self.sample_num = sample_num
+        self.h_dim = h_dim
+        self.z_dim = z_dim
+        self.h_project = nn.Linear(h_dim, h_dim)
+        self.z_project = nn.Linear(z_dim, h_dim)
+        self.aug = aug
+
+    def forward(self, all_h, all_z):
+        h_pooling = self.graph_pooling(all_h, self.h_dim, self.h_dim)
+        z_pooling = self.graph_pooling(all_z, self.z_dim, self.h_dim)
+        #random shuffle
+        if self.aug == 'shuffle':
+            index = [i for i in range(len(z_pooling))]
+            random.shuffle(index)
+            z_pooling_aug = z_pooling[index]
+        elif self.aug == 'noise':
+            noise = torch.randn(z_pooling.shape).to(self.device)
+            z_pooling_aug = z_pooling + noise
+        else:
+            raise NotImplementedError('Other augmentations not implemented')
+        global_mean = torch.mean(z_pooling, dim=0)
+        seq_len = z_pooling.shape[0]
+        jsd_loss = 0
+        regularizer = 0
+        
+        for t in np.arange(0, seq_len):
+            diff = torch.abs(z_pooling[t] - global_mean)
+            regularizer += torch.sum(diff*diff) 
+            if t >= seq_len-self.sample_num:
+                continue
+            for n in np.arange(1, self.sample_num+1):
+                pos = F.cosine_similarity(z_pooling[t], z_pooling[t+n], dim=0)
+                neg = F.cosine_similarity(z_pooling[t], z_pooling_aug[t+n], dim=0)
+                jsd_loss += torch.log(pos) + torch.log(1-neg)
+        jsd_loss /= -1*(seq_len-self.sample_num)*self.sample_num
+        regularizer /= seq_len
+        return jsd_loss, regularizer
+
+    def graph_pooling(self, x, x_dim, z_dim):
+        x_out = torch.empty((len(x), z_dim)).float().to(self.device)
+        for i, x_t in enumerate(x):
+            x_t = torch.mean(x_t, dim = 0)
+            if x_dim == self.h_dim:
+                x_t = self.h_project(x_t)
+            else:
+                x_t = self.z_project(x_t)
+            x_out[i] = x_t
+        return x_out    
+
 
 class CPC(nn.Module):
     def __init__(self, device, sample_num, timespan, h_dim, z_dim):
@@ -190,8 +244,9 @@ class Model(nn.Module):
         self.layer_num = args.layer_num
         self.h_dim = args.h_dim
         self.lamda = args.lamda
-        self.cpc = CPC(args.device, args.sample_num, args.timespan, args.h_dim, args.z_dim)
-    
+        # self.cpc = CPC(args.device, args.sample_num, args.timespan, args.h_dim, args.z_dim)
+        self.cpc = Contrastive(args.device, args.sample_num, args.h_dim, args.z_dim, 'noise')
+
     def forward(self, dataloader, all_time_nodes, all_time_adj):
         kld_loss = 0
         nll_loss = 0
@@ -207,7 +262,7 @@ class Model(nn.Module):
             nodes = all_time_nodes[t]
             adj = all_time_adj[t]
             if t == 0:
-                h_t = Variable(torch.zeros(self.layer_num, x.size(0), self.h_dim).to(self.device))
+                h_t = torch.zeros(self.layer_num, x.size(0), self.h_dim).to(self.device)
             
             (prior_mean_t, prior_std_t), (enc_mean_t, enc_std_t), z_t, h_t = self.conv(x, h_t, edge_index)
             # print('mid: ', t)
@@ -230,8 +285,10 @@ class Model(nn.Module):
             all_z.append(z_t_sl)
             all_h.append(h_t_sl)
         
-        nce_loss, distance = self.cpc(all_z, all_h)
-        return kld_loss + nll_loss + self.lamda * (nce_loss + self.eps * distance)
+        nll_loss /= dataloader.__len__()
+        kld_loss /= dataloader.__len__()
+        jsd_loss, regularizer = self.cpc(all_z, all_h)
+        return  nll_loss, kld_loss, jsd_loss, regularizer 
 
     def reset_parameters(self, stdv=1e-1):
         for weight in self.parameters():

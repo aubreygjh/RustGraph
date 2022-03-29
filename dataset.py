@@ -1,7 +1,7 @@
 import os
 import torch
 from torch_geometric.data import InMemoryDataset, download_url, extract_tar, extract_gz, extract_zip
-from data import *
+from data2 import *
 
 class DynamicGraphAnomaly(InMemoryDataset):
     url = {'email':'https://nrvis.com/download/data/dynamic/email-dnc.zip',

@@ -100,7 +100,6 @@ if __name__ == '__main__':
     model_file = os.path.join(model_path, f'snaps{args.snap_size}_train{args.train_ratio}_anomaly{args.anomaly_ratio}_epochs{args.epochs}_lr{args.lr}_xdim{args.x_dim}_hzdim{args.z_dim}_eps{args.eps}_lambda{args.lamda}.pkl')
 
     # exp_details(args)
-
     #Init dataloader
     dataset = []
     if args.dataset not in ['uci', 'digg', 'btc_alpha', 'btc_otc', 'email', 'as_topology', 'hepth']:
@@ -122,9 +121,9 @@ if __name__ == '__main__':
                         + str(args.iter_num) + "_" + str(args.iter_epochs) + "_pos.pt")
     edge_save_path_2 = ("./edge_save/" + args.dataset + "_"+ str(args.initial_epochs)+ "_"
                         + str(args.iter_num) + "_" + str(args.iter_epochs) + "_not_neg.pt")
-
-    #if os.path.exists(edge_save_path_1) == False or os.path.exists(edge_save_path_2) == False:
-    if True:
+    pos_edges, not_neg_edges = [], []
+    if os.path.exists(edge_save_path_1) == False or os.path.exists(edge_save_path_2) == False:
+    #if True:
         #Init model
         # model = Model(args).to(args.device)
         # optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
@@ -135,11 +134,10 @@ if __name__ == '__main__':
             optimizer.zero_grad()
             with torch.autograd.set_detect_anomaly(True):
                 bce_loss, recon_loss, kld_loss, nce_loss, h_t, _ = model(data_train, 0)
-                loss = bce_loss + recon_loss + kld_loss + args.lamda * nce_loss
+                loss = bce_loss 
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 10)
             optimizer.step()
-        
         print("Now begin iter training!")
         for iter in range(args.iter_num):
             print("current: ", iter)
@@ -148,13 +146,15 @@ if __name__ == '__main__':
                 pos_edges, not_neg_edges = model(data_train, 0)
             else:
                 pos_edges, not_neg_edges = model(data_train, 0, pos_edges, not_neg_edges)
+            if iter == args.iter_num - 1:
+                break
             model, optimizer = initialize()
             model.train()
             for epoch in tqdm(range(args.iter_epochs)):
                 optimizer.zero_grad()
                 with torch.autograd.set_detect_anomaly(True):
                     bce_loss, recon_loss, kld_loss, nce_loss, h_t, _ = model(data_train, 1, pos_edges, not_neg_edges)
-                    loss = bce_loss + recon_loss + kld_loss + args.lamda * nce_loss
+                    loss = bce_loss
                     loss.backward()
                     torch.nn.utils.clip_grad_norm_(model.parameters(), 10)
                 optimizer.step()
@@ -164,7 +164,6 @@ if __name__ == '__main__':
     else:
         pos_edges = torch.load(edge_save_path_1)
         not_neg_edges = torch.load(edge_save_path_2)
-
     print("Now begin last training!")
     model, optimizer = initialize()
     # lr_scheduler = LR_Scheduler(optimizer,args.warmup_epochs, args.warmup_lr/256, args.epochs, args.lr/256, args.lr/256, len(data_train), )
@@ -172,6 +171,7 @@ if __name__ == '__main__':
     print(f'\n Total Loading Rime:{(load_time-start_time):.4f}')
 
     #Start Training
+    
     # model.train() 
     max_auc = 0.0   
     max_epoch = 0
@@ -180,7 +180,11 @@ if __name__ == '__main__':
         optimizer.zero_grad()
         with torch.autograd.set_detect_anomaly(True):
             bce_loss, recon_loss, kld_loss, nce_loss, h_t, _ = model(data_train, 2, pos_edges, not_neg_edges)
-            loss = bce_loss + recon_loss + kld_loss + args.lamda * nce_loss
+            # if epoch < 50:
+            #     loss = nce_loss + recon_loss + kld_loss #+ bce_loss 
+            # else:
+            #     loss = bce_loss    
+            loss = bce_loss + 1.0 * nce_loss + 1.0 * (recon_loss + kld_loss)  
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 10)
         optimizer.step()

@@ -1,4 +1,5 @@
 import os
+import random
 import time
 from datetime import datetime as dt
 import datetime
@@ -82,7 +83,15 @@ def preprocessDataset(dataset,raw_file):
     print(edges.max(),edges.min())
     return edges
 
-def n2v_train(edges, x_dim, device, n, epoch_num):
+
+def generateDataset(dataset, raw_file, device, snap_size, train_per, anomaly_per, x_dim):
+    print('Generating data with anomaly for Dataset: ', dataset)
+    edges = preprocessDataset(dataset, raw_file)
+    edges = edges[:, 0:2].astype(dtype=int)
+    vertices = np.unique(edges)
+    m = len(edges)
+    n = len(vertices)
+
     edge_index = torch.LongTensor(edges).t().contiguous()
     n2v = Node2Vec(edge_index=edge_index, embedding_dim=x_dim,walk_length=25,context_size=25, num_nodes=n).to(device)
     loader = n2v.loader(batch_size=128, shuffle=True, num_workers=4)
@@ -97,62 +106,31 @@ def n2v_train(edges, x_dim, device, n, epoch_num):
             optimizer.step()
             total_loss += loss.item()
         return total_loss / len(loader)
-    for epoch in range(1, epoch_num):
+    for epoch in range(1, 50):
         loss = train()
         print(f'Epoch: {epoch:02d}, Loss: {loss:.4f}')
     x = n2v()
-    return x
-
-def generateDataset(dataset, raw_file, device, snap_size, train_per, anomaly_per, x_dim):
-    print('Generating data with anomaly for Dataset: ', dataset)
-    edges = preprocessDataset(dataset, raw_file)
-    edges = edges[:, 0:2].astype(dtype=int)
-    vertices = np.unique(edges)
-    m = len(edges)
-    n = len(vertices)
-    
-    # edge_index = torch.LongTensor(edges).t().contiguous()
-    # n2v = Node2Vec(edge_index=edge_index, embedding_dim=x_dim,walk_length=25,context_size=25, num_nodes=n).to(device)
-    # loader = n2v.loader(batch_size=128, shuffle=True, num_workers=4)
-    # optimizer = torch.optim.Adam(list(n2v.parameters()), lr=0.01)
-    # def train():
-    #     n2v.train()
-    #     total_loss = 0
-    #     for pos_rw, neg_rw in loader:
-    #         optimizer.zero_grad()
-    #         loss = n2v.loss(pos_rw.to(device), neg_rw.to(device))
-    #         loss.backward()
-    #         optimizer.step()
-    #         total_loss += loss.item()
-    #     return total_loss / len(loader)
-    # for epoch in range(1, 100):
-    #     loss = train()
-    #     print(f'Epoch: {epoch:02d}, Loss: {loss:.4f}')
-    # x = n2v()
-    if dataset == 'digg':
-        epoch_num = 75
-    else:
-        epoch_num = 50
-    x = n2v_train(edges, x_dim, device, n, epoch_num)
-    file_name_test = "./ano_generation/test_" + dataset + str(anomaly_per) + ".npy"
-    file_name_train = "./ano_generation/train_" + dataset + str(anomaly_per) + ".npy"
-    if os.path.exists(file_name_test) == False and os.path.exists(file_name_train)==False:
-        synthetic_test, train = anomaly_generation2(train_per, anomaly_per, edges, n, m, seed=1)
-        np.save(file_name_test, synthetic_test)
-        np.save(file_name_train, train)
-    else:
-        synthetic_test = np.load(file_name_test)
-        train = np.load(file_name_train)
+    # file_name_test = "./ano_generation/test_" + dataset + str(anomaly_per) + ".npy"
+    # file_name_train = "./ano_generation/train_" + dataset + str(anomaly_per) + ".npy"
+    # if os.path.exists(file_name_test) == False and os.path.exists(file_name_train)==False:
+    #     synthetic_test, train = anomaly_generation2(train_per, anomaly_per, edges, n, m, seed=1)
+    #     np.save(file_name_test, synthetic_test)
+    #     np.save(file_name_train, train)
+    # else:
+    #     synthetic_test = np.load(file_name_test)
+    #     train = np.load(file_name_train)
     # synthetic_test, train = anomaly_generation2(train_per, anomaly_per, edges, n, m, seed=1)
+    synthetic_test, train, anomaly_num = edge_division(train_per, anomaly_per, edges, n, m)
     train_size = int(len(train) / snap_size + 0.5)
-    test_size = int(len(synthetic_test) / snap_size + 0.5)
+    test_size = int((len(synthetic_test)+anomaly_num) / snap_size + 0.5)
     print(train_size, test_size)
-
+    # 计算每个时间步的异常数量
+    anomaly_num_list = get_anomaly_num(anomaly_num, test_size)
+    # 
     data_list = []
     for ii in range(train_size):
-        print('train:', ii)
         start_loc = ii * snap_size
-        end_loc = (ii + 1) * snap_size
+        end_loc = (ii+1) * snap_size
         edge_index = train[start_loc:end_loc, 0:2]
         node_index = np.unique(edge_index)
         y = train[start_loc:end_loc, 2]
@@ -162,48 +140,115 @@ def generateDataset(dataset, raw_file, device, snap_size, train_per, anomaly_per
         y = torch.LongTensor(y)
         data = Data(x=x, edge_index=edge_index,node_index=node_index,y=y, edge_attr=edge_attr)
         data_list.append(data)
+    
     for ii in range(test_size):
-        print('test:', ii)
-        start_loc = ii * snap_size
-        end_loc = (ii + 1) * snap_size
+        if ii == 0:
+            start_loc = 0
+        else:
+            start_loc = end_loc
+        end_loc = start_loc + snap_size - anomaly_num_list[ii]
         edge_index = synthetic_test[start_loc:end_loc, 0:2]
         node_index = np.unique(edge_index)
-        y = synthetic_test[start_loc:end_loc, 2]
+        # 异常注入
+        ano_num_1 = random.randint(0, anomaly_num_list[ii])
+        ano_num_2 = anomaly_num_list[ii] - ano_num_1
+        ori_adj_1 = {i:set() for i in node_index}
+        ori_adj_2 = {i:set() for i in node_index}
+        # 当前已经存在的顶点
+        for edge in edge_index:
+            ori_adj_1[edge[0]].add(edge[1])
+            ori_adj_1[edge[1]].add(edge[0])
+        for j in node_index:
+            for jj in ori_adj_1[j]:
+                ori_adj_2[j].union(ori_adj_1[jj])
+                
+        if ano_num_1 != 0:
+            idx_1 = np.expand_dims(np.transpose(np.random.choice(node_index, m)) , axis=1)
+            idx_2 = np.expand_dims(np.transpose(np.random.choice(node_index, m)) , axis=1)
+            fake_edges_1 = np.concatenate((idx_1, idx_2), axis=1)
+            fake_edges_1 = processEdges2(fake_edges_1, ori_adj_2, ano_num_1, edges, mode=0)
+            fake_edges_1 = fake_edges_1[0:ano_num_1,:]
+        else:
+            fake_edges_1 = np.zeros([0,2])
+        # 当前不存在的顶点
+        if ano_num_2 != 0:
+            new_node = np.array(list(set(vertices)-set(node_index)))
+            idx_1 = np.expand_dims(np.transpose(np.random.choice(new_node, m)) , axis=1)
+            idx_2 = np.expand_dims(np.transpose(np.random.choice(vertices, m)) , axis=1)
+            fake_edges_2 = np.concatenate((idx_1, idx_2), axis=1)
+            fake_edges_2 = processEdges2(fake_edges_2, ori_adj_2, ano_num_2, edges, mode=1)
+            fake_edges_2 = fake_edges_2[0:ano_num_2,:]
+        else:
+            fake_edges_2 = np.zeros([0,2])
+        # 综合两阶段的异常边
+        fake_edges = np.concatenate((fake_edges_1, fake_edges_2), axis=0)
+        fake_edges = np.concatenate((fake_edges, np.ones([np.size(fake_edges, 0),1])), axis=1)
+        edge_index = np.concatenate((edge_index, fake_edges[:,0:2]), axis=0)
+        y = np.concatenate((synthetic_test[start_loc:end_loc, 2], fake_edges[:,2]), axis=0)
+        
+        node_index = np.unique(edge_index)
         edge_attr = torch.randn(len(edge_index), 64)
+
         edge_index = torch.LongTensor(edge_index).t().contiguous()
         node_index = torch.LongTensor(node_index)
         y = torch.LongTensor(y)
         data = Data(x=x, edge_index=edge_index,node_index=node_index,y=y,edge_attr=edge_attr)
         data_list.append(data)
-     
-    return data_list, train_size
     
+    return data_list, train_size
+
+def get_anomaly_num(total_num, size):
+    ano_per = []
+    anomaly_num = []
+    for i in range(size):
+        ano_per.append(random.randint(10,20))
+    total_per = sum(ano_per)
+    for i in range(size):
+        num = int(ano_per[i] * total_num / total_per + 0.5)
+        anomaly_num.append(num)
+    return anomaly_num 
+
+def edge_division(ini_graph_percent, anomaly_percent, data, n, m):
+    train_num = int(np.floor(ini_graph_percent * m))
+    train = data[0:train_num, : ]
+    test = data[train_num:, : ]
+    anomaly_num = int(np.floor(anomaly_percent * np.size(test, 0)))
+    
+    train = np.concatenate((train, np.zeros([np.size(train, 0),1])), axis=1)
+    test = np.concatenate((test, np.zeros([np.size(test, 0),1])), axis=1)
+    return train, test, anomaly_num
+
+def processEdges2(fake_edges, data, total_num, all_data, mode):
+    idx_fake = np.nonzero(fake_edges[:, 0] - fake_edges[:, 1] > 0)
+    tmp = fake_edges[idx_fake]
+    tmp[:, [0, 1]] = tmp[:, [1, 0]]
+    fake_edges[idx_fake] = tmp
+
+    idx_remove_dups = np.nonzero(fake_edges[:, 0] - fake_edges[:, 1] < 0)
+    fake_edges = fake_edges[idx_remove_dups]
+    
+    a = fake_edges.tolist()
+    b = data
+    b_2 = all_data.tolist()
+    c = []
+    
+    if mode==1:
+        for i in a:
+            if i not in b_2 :
+                c.append(i)
+                if len(c) >= total_num:
+                    break
+    else:
+        for i in a:
+            if i[1] not in b[i[0]] and i not in b_2:
+                c.append(i)
+                if len(c) >= total_num:
+                    break
+    fake_edges = np.array(c)
+    return fake_edges
+
 
 def anomaly_generation2(ini_graph_percent, anomaly_percent, data, n, m,seed = 1):
-    """ generate anomaly
-    split the whole graph into training network which includes parts of the
-    whole graph edges(with ini_graph_percent) and testing edges that includes
-    a ratio of manually injected anomaly edges, here anomaly edges mean that
-    they are not shown in previous graph;
-     input: ini_graph_percent: percentage of edges in the whole graph will be
-                                sampled in the intitial graph for embedding
-                                learning
-            anomaly_percent: percentage of edges in testing edges pool to be
-                              manually injected anomaly edges(previous not
-                              shown in the whole graph)
-            data: whole graph matrix in sparse form, each row (nodeID,
-                  nodeID) is one edge of the graph
-            n:  number of total nodes of the whole graph
-            m:  number of edges in the whole graph
-     output: synthetic_test: the testing edges with injected abnormal edges,
-                             each row is one edge (nodeID, nodeID, label),
-                             label==0 means the edge is normal one, label ==1
-                             means the edge is abnormal;
-             train_mat: the training network with square matrix format, the training
-                        network edges for initial model training;
-             train:  the sparse format of the training network, each row
-                        (nodeID, nodeID)
-    """
     # The actual generation method used for Netwalk(shown in matlab version)
     # Abort the SpectralClustering
     np.random.seed(seed)
@@ -284,6 +329,7 @@ def processEdges(fake_edges, data):
     :param data: orginal edge list
     :return: list of edges
     """
+    
     # b:list->set
     # Time cost rate is proportional to the size
 

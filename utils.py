@@ -62,7 +62,8 @@ def args_parser():
     # ===== hyper-parameters =====
     parser.add_argument('--eps', type=float, default=0.2, help='eps')
     parser.add_argument('--at_alpha', type=float, default=1, help='at_alpha')
-    parser.add_argument('--lamda', type=float, default=1.0, help='lamda')
+    parser.add_argument('--lamda', type=float, default=1, help='lamda_1')
+    parser.add_argument('--lamda_2', type=float, default=1, help='lamda_1')
     parser.add_argument('--threshold', type=float, default=2.9, help='anomaly threshold')
     # ===== model parameters =====
     parser.add_argument('--layer_num', type=int, default=2, help='rnn layers')

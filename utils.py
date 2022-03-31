@@ -42,7 +42,7 @@ def str2bool(v):
 
 def args_parser():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--device', type=str, default='cuda:1', help='specify cuda devices')
+    parser.add_argument('--device', type=str, default='cuda:0', help='specify cuda devices')
     # ===== dataset parameters =====
     parser.add_argument('--dataset', type=str, default='uci', help='name of dataset')
     parser.add_argument('--snaps', type=int, default=100, help='')

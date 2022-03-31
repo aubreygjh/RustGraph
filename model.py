@@ -9,27 +9,6 @@ from torch_geometric.nn import SAGEConv,GATConv,InnerProductDecoder
 from torch_geometric.utils import negative_sampling, remove_self_loops, add_self_loops, get_laplacian, to_scipy_sparse_matrix, is_undirected
 from scipy.sparse.linalg import eigs, eigsh
 
-class LR_Scheduler(object):
-    def __init__(self, optimizer, warmup_epochs, warmup_lr, num_epochs, base_lr, final_lr, iter_per_epoch):
-        self.base_lr = base_lr
-        # self.constant_predictor_lr = constant_predictor_lr
-        warmup_iter = iter_per_epoch * warmup_epochs
-        warmup_lr_schedule = np.linspace(warmup_lr, base_lr, warmup_iter)
-        decay_iter = iter_per_epoch * (num_epochs - warmup_epochs)
-        cosine_lr_schedule = final_lr+0.5*(base_lr-final_lr)*(1+np.cos(np.pi*np.arange(decay_iter)/decay_iter))
-        
-        self.lr_schedule = np.concatenate((warmup_lr_schedule, cosine_lr_schedule))
-        self.optimizer = optimizer
-        self.iter = 0
-        self.current_lr = 0
-    def step(self):
-        for param_group in self.optimizer.param_groups:
-            lr = param_group['lr'] = self.lr_schedule[self.iter]
-        self.iter += 1
-        self.current_lr = lr
-        return lr
-    def get_lr(self):
-        return self.current_lr
 
 class GConv(nn.Module):
     def __init__(self, input_dim, output_dim, device, act = None, bias = True, dropout = 0.):
@@ -300,7 +279,7 @@ class Model(nn.Module):
         if self.training == False and stage == 0:
             return new_pos_edges, new_not_neg_edges       
         else:
-            return bce_loss, recon_loss, kld_loss, nce_loss, h_t, pos_score_list
+            return bce_loss, recon_loss + kld_loss, nce_loss, h_t, pos_score_list
     
     def reset_parameters(self, stdv=1e-1):
         for weight in self.parameters():

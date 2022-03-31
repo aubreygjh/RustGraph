@@ -1,7 +1,7 @@
 import os
 import torch
 from torch_geometric.data import InMemoryDataset, download_url, extract_tar, extract_gz, extract_zip
-from data2 import *
+from data import *
 
 class DynamicGraphAnomaly(InMemoryDataset):
     url = {'email':'https://nrvis.com/download/data/dynamic/email-dnc.zip',
@@ -21,7 +21,7 @@ class DynamicGraphAnomaly(InMemoryDataset):
         self.device = args.device
         self.x_dim = args.x_dim
         super(DynamicGraphAnomaly, self).__init__(root=root, transform=transform, pre_transform=pre_transform, pre_filter=pre_filter)
-        self.data, self.slices = torch.load(self.processed_paths[0])
+        self.data, self.slices = torch.load(self.processed_paths[0], map_location=self.device)
         self.train_size = torch.load(self.processed_paths[1])
     @property
     def raw_dir(self):

@@ -134,8 +134,8 @@ def generateDataset(dataset, raw_file, device, snap_size, train_per, anomaly_per
     else:
         epoch_num = 50
     x = n2v_train(edges, x_dim, device, n, epoch_num)
-    file_name_test = "./ano_generation/test_" + dataset + str(anomaly_per) + ".npy"
-    file_name_train = "./ano_generation/train_" + dataset + str(anomaly_per) + ".npy"
+    file_name_test = f"./ano_generation/test_{dataset}_{anomaly_per}_{train_per}_{snap_size}.npy"
+    file_name_train = f"./ano_generation/train_{dataset}_{anomaly_per}_{train_per}_{snap_size}.npy"
     if os.path.exists(file_name_test) == False and os.path.exists(file_name_train)==False:
         synthetic_test, train = anomaly_generation2(train_per, anomaly_per, edges, n, m, seed=1)
         np.save(file_name_test, synthetic_test)

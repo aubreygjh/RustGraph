@@ -79,11 +79,11 @@ class Generative(nn.Module):
         self.phi_x = nn.Sequential(nn.Linear(x_dim, h_dim), nn.ReLU())
         self.phi_z = nn.Sequential(nn.Linear(z_dim, h_dim), nn.ReLU())
         
-        self.enc = GConv(h_dim + h_dim + 1, h_dim, device=device, act=F.relu)
+        self.enc = GConv(h_dim + h_dim, h_dim, device=device, act=F.relu)
         self.enc_mean = GConv(h_dim, z_dim, device=device)
         self.enc_std = GConv(h_dim, z_dim, device=device, act=F.softplus)
         
-        self.prior = nn.Sequential(nn.Linear(h_dim, h_dim), nn.ReLU())
+        self.prior = nn.Sequential(nn.Linear(h_dim+1, h_dim), nn.ReLU())
         self.prior_mean = nn.Sequential(nn.Linear(h_dim, z_dim))
         self.prior_std = nn.Sequential(nn.Linear(h_dim, z_dim), nn.Softplus())
         self.device = device
@@ -93,12 +93,11 @@ class Generative(nn.Module):
     
     def forward(self, x, h, diff, edge_index):
         phiX = self.phi_x(x)
-        enc_x = self.enc(torch.cat([phiX, h[-1], diff], 1), edge_index)
-        #enc_x = self.enc(torch.cat([phiX, h[-1]], 1), edge_index)
+        # enc_x = self.enc(torch.cat([phiX, h[-1], diff], 1), edge_index)
+        enc_x = self.enc(torch.cat([phiX, h[-1]], 1), edge_index)
         enc_x_mean = self.enc_mean(enc_x, edge_index)
         enc_x_std = self.enc_std(enc_x, edge_index)
-        # prior_x = self.prior(torch.cat([h[-1], diff], 1))
-        prior_x = self.prior(h[-1])
+        prior_x = self.prior(torch.cat([h[-1], diff], 1))
         # prior_x = self.prior(h[-1])
         prior_x_mean = self.prior_mean(prior_x)
         prior_x_std = self.prior_std(prior_x)

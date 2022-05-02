@@ -14,7 +14,7 @@ class DynamicGraphAnomaly(InMemoryDataset):
             'enron':''}
     def __init__(self, root, name, args, transform=None, pre_transform=None, pre_filter=None):
         self.dataset = name
-        self.name = name + "_" + str(args.anomaly_ratio)
+        self.name = name + "_" + str(args.anomaly_ratio) + "_" + str(args.train_ratio) + "_" + str(args.snap_size)
         self.snap_size = args.snap_size
         self.train_ratio = args.train_ratio
         self.anomaly_ratio = args.anomaly_ratio
@@ -45,8 +45,6 @@ class DynamicGraphAnomaly(InMemoryDataset):
             return ['opsahl-ucsocial/out.opsahl-ucsocial']
         elif self.dataset =='digg':
             return ['munmun_digg_reply/out.munmun_digg_reply']
-        elif self.dataset =='hepth':
-            return ['cit-HepTh.txt','cit-HepTh-dates.txt']
        
 
     @property
@@ -54,30 +52,18 @@ class DynamicGraphAnomaly(InMemoryDataset):
         return ['data.pt', 'train_size.pt']
 
     def download(self):
-        if self.dataset == 'hepth':
-            for url in self.url[self.dataset]:
-                file = download_url(url, self.raw_dir)
-                extract_gz(file, self.raw_dir)
-                os.unlink(file)
-        else:
-            file = download_url(self.url[self.dataset], self.raw_dir)
-            if self.dataset in ['email', 'as_topology']:
-                extract_zip(file, self.raw_dir)
-            elif self.dataset in ['uci', 'digg']:
-                extract_tar(file, self.raw_dir, mode='r:bz2')
-            elif self.dataset in ['btc_alpha', 'btc_otc']:
-                extract_gz(file, self.raw_dir)        
-            os.unlink(file)
+        file = download_url(self.url[self.dataset], self.raw_dir)
+        if self.dataset in ['email', 'as_topology']:
+            extract_zip(file, self.raw_dir)
+        elif self.dataset in ['uci', 'digg']:
+            extract_tar(file, self.raw_dir, mode='r:bz2')
+        elif self.dataset in ['btc_alpha', 'btc_otc']:
+            extract_gz(file, self.raw_dir)        
+        os.unlink(file)
       
 
     def process(self):
-        if self.dataset == 'hepth':
-            raw_file = os.path.join(self.raw_dir, 'hepth_raw')
-            link_file = os.path.join(self.raw_dir, self.raw_file_names[0])
-            date_file = os.path.join(self.raw_dir, self.raw_file_names[1])
-            hepth(link_file, date_file, raw_file)
-        else:
-            raw_file = os.path.join(self.raw_dir, self.raw_file_names[0])
+        raw_file = os.path.join(self.raw_dir, self.raw_file_names[0])
         data_list, train_size = generateDataset(self.dataset, raw_file, self.device, self.snap_size, self.train_ratio, self.anomaly_ratio, self.x_dim)
         if self.pre_filter is not None:
             data_list = [data for data in data_list if self.pre_filter(data)]

@@ -69,10 +69,12 @@ if __name__ == '__main__':
         test_labels.append(y.tolist())
     test_labels = np.array(test_labels)
 
-    edge_save_path_1 = ("./edge_save/" + args.dataset + "_"+ str(args.initial_epochs)+ "_" 
-                        + str(args.iter_num) + "_" + str(args.iter_epochs) + "_pos.pt")
-    edge_save_path_2 = ("./edge_save/" + args.dataset + "_"+ str(args.initial_epochs)+ "_"
-                        + str(args.iter_num) + "_" + str(args.iter_epochs) + "_not_neg.pt")
+    # edge_save_path_1 = ("./edge_save/" + args.dataset + "_"+ str(args.initial_epochs)+ "_" 
+    #                     + str(args.iter_num) + "_" + str(args.iter_epochs) + "_pos.pt")
+    # edge_save_path_2 = ("./edge_save/" + args.dataset + "_"+ str(args.initial_epochs)+ "_"
+    #                     + str(args.iter_num) + "_" + str(args.iter_epochs) + "_not_neg.pt")
+    edge_save_path_1 = f'./edge_save/{args.dataset}_{args.train_ratio}_{args.anomaly_ratio}_{args.snap_size}_pos.pt'
+    edge_save_path_2 = f'./edge_save/{args.dataset}_{args.train_ratio}_{args.anomaly_ratio}_{args.snap_size}_not_neg.pt'
     pos_edges, not_neg_edges = [], []
 
     if os.path.exists(edge_save_path_1) == False or os.path.exists(edge_save_path_2) == False:
@@ -139,11 +141,14 @@ if __name__ == '__main__':
                 _, _, _, _, score_list = model(data_test, 3, h_t = h_t)
             score_all = []
             label_all = []
+            # log.writelines(f'{epoch}: ')
             for t in range(len(score_list)):
                 score = score_list[t].cpu().numpy().squeeze()
                 score_all.append(score)
                 label_all.append(test_labels[t])
                 auc = roc_auc_score(test_labels[t], score)
+            #     log.writelines(f'{auc:.3f}\t')
+            # log.writelines('\n')
             score_all = np.hstack(score_all)
             label_all = np.hstack(label_all)
             auc_all = roc_auc_score(label_all, score_all)
@@ -157,8 +162,8 @@ if __name__ == '__main__':
         tb.add_scalar('gen_loss', gen_loss.item(), epoch)
         tb.add_scalar('con_loss', con_loss.item(), epoch)
         tb.add_scalar('loss', loss.item(), epoch)
-        print(f'bce_loss:{bce_loss.item():.4f} + gen_loss: {gen_loss.item():.4f} + con_loss: {con_loss.item():.4f}')
-        print(f'train_loss: {loss.item():.4f}')
+        # print(f'bce_loss:{bce_loss.item():.4f} + gen_loss: {gen_loss.item():.4f} + con_loss: {con_loss.item():.4f}')
+        # print(f'train_loss: {loss.item():.4f}')
     tb.close()
     log.writelines("loss\tbce_loss\tgen_loss\tcon_loss\t\n")
     log.writelines(f'{loss:.3f}\t{bce_loss:.3f}\t{gen_loss:.3f}\t{con_loss:.3f}\t\n')

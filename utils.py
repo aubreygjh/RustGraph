@@ -60,7 +60,10 @@ def args_parser():
     parser.add_argument('--lr', type=float, default=0.001, help='learning rate')
     parser.add_argument('--weight_decay', type=float, default=0.01, help='weight decay')
     # ===== hyper-parameters =====
+    parser.add_argument('--window', type=int, default=1, help='')
     parser.add_argument('--eps', type=float, default=0.2, help='eps')
+    parser.add_argument('--gen_weight', type=float, default=1, help='')
+    parser.add_argument('--con_weight', type=float, default=1, help='')
     parser.add_argument('--at_alpha', type=float, default=1, help='at_alpha')
     parser.add_argument('--lamda', type=float, default=1, help='lamda_1')
     parser.add_argument('--lamda_2', type=float, default=1, help='lamda_1')

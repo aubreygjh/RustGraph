@@ -112,10 +112,10 @@ class Generative(nn.Module):
         return eps1.mul(std).add_(mean)
 
 class Contrastive(nn.Module):
-    def __init__(self, device, z_dim):
+    def __init__(self, device, z_dim, window):
         super(Contrastive, self).__init__()
         self.device = device
-        self.max_dis = 1
+        self.max_dis = window
         self.linear = nn.Linear(z_dim, z_dim)
     
     def forward(self, all_z, all_node_idx):
@@ -153,7 +153,7 @@ class Model(nn.Module):
         self.encoder = Generative(args.x_dim, args.h_dim, args.z_dim, args.layer_num, args.device)
         self.prediction = MLP(args.z_dim, args.z_dim, args.z_dim * 8)
         # self.prediction = MLP(args.z_dim, args.z_dim, 32)
-        self.contrastive = Contrastive(args.device, args.z_dim)
+        self.contrastive = Contrastive(args.device, args.z_dim, args.window)
         self.dec = InnerProductDecoder()
         self.mse = nn.MSELoss(reduction='mean')
         self.fcc = FCC(args.z_dim, 1, args.device)
@@ -175,17 +175,16 @@ class Model(nn.Module):
         self.vat_eps = 2.5
 
     
-    def forward(self, dataloader, stage=0, pos_edges = [], not_neg_edges=[], h_t=None):
+    def forward(self, dataloader, h_t=None):
         kld_loss = 0
         recon_loss = 0
-        bce_loss = 0
         all_z, all_h, all_node_idx = [], [], []
-        new_pos_edges, new_not_neg_edges = [], []
+        score_list = []
 
-        pos_score_list = []
         for t, data in enumerate(dataloader):
             data = data.to(self.device)
             x = data.x
+            y = data.y.unsqueeze(1).float()
             edge_index = data.edge_index
             node_index = data.node_index   
             if h_t == None:
@@ -204,81 +203,28 @@ class Model(nn.Module):
             prior_mean_t_sl = prior_mean_t[node_index, :]
             prior_std_t_sl = prior_std_t[node_index, :]
             h_t_sl = h_t[-1, node_index, :]
+            
+            edge_emb = z_t[edge_index[0]] + z_t[edge_index[1]]
+            edge_score = self.fcc(edge_emb)
 
-            pos_edge_index, not_neg_edge_index = edge_index, edge_index
-            if not (stage == 0 or stage == 3):  #排除初试训练、第一次输出边和最终测试阶段
-                pos_edge_index = pos_edges[t].to(self.device)
-                not_neg_edge_index = not_neg_edges[t].to(self.device)
+            if t == 0:
+                bce_loss = F.binary_cross_entropy(edge_score, y, reduction='none')
+            else:
+                bce_loss = torch.vstack([bce_loss, F.binary_cross_entropy(edge_score, y, reduction='none')])
+            # bce_loss += self._cal_at_loss(pos_edge, y_pos)
+            kld_loss += self._kld_gauss(enc_mean_t_sl, enc_std_t_sl, prior_mean_t_sl, prior_std_t_sl)
+            recon_loss += self._recon_loss(z_t, x, edge_index) 
             
-            pos_edge = z_t[pos_edge_index[0]] + z_t[pos_edge_index[1]]
-            pos_score = self.fcc(pos_edge)   
-            y_pos = torch.zeros(pos_score.size(0)).to(self.device)
-            pos_edge_num = pos_edge_index.size()[1]
-            
-            if not (self.training == False and stage==3):
-                neg_edge_index = negative_sampling(not_neg_edge_index, num_neg_samples=pos_edge_num)
-                neg_edge = z_t[neg_edge_index[0]] + z_t[neg_edge_index[1]]
-                neg_score = self.fcc(neg_edge)
-                y_neg = torch.ones(neg_score.size(0)).to(self.device)
-                
-                if self.training == False:
-                    convergence_rate, prob_threshold, relabel_threshold = 0.99, 0.25, 0.7
-                    
-                    not_neg_edge_list = not_neg_edge_index.t().tolist()
-                    neg_edge_list = neg_edge_index.t().tolist()
-                    pos_edge_list = pos_edge_index.t().tolist()
-                    
-                    _neg_score, neg_score_id = torch.sort(neg_score.squeeze(), descending=True, dim=0)
-                    neg_score_list = _neg_score.tolist()
-                    prob = 2 * prob_threshold * neg_score_list[0] if neg_score_list[0] > convergence_rate else prob_threshold * neg_score_list[0]
-                    for i, score in enumerate(neg_score_list):
-                        if score < prob:
-                            not_neg_edge_list.append(neg_edge_list[neg_score_id[i]])
-                        if (1-score) > relabel_threshold:
-                            pos_edge_list.append(neg_edge_list[neg_score_id[i]])
-                    
-                    _pos_score, pos_score_id = torch.sort(pos_score.squeeze(), descending=False, dim=0)
-                    pos_score_list = _pos_score.tolist()
-                    prob = (1 - 2 * prob_threshold * (1-pos_score_list[0])) if (1-pos_score_list[0]) > convergence_rate else (1 - prob_threshold * (1-pos_score_list[0]))
-                    pos_edge_list_clone = [edg for edg in pos_edge_list]
-                    for i, score in enumerate(pos_score_list):
-                        cur_pos_edge = pos_edge_list[pos_score_id[i]]
-                        if score > prob:
-                            while cur_pos_edge in pos_edge_list_clone:
-                                pos_edge_list_clone.remove(cur_pos_edge)
-                        if score > relabel_threshold:
-                            while cur_pos_edge in not_neg_edge_list:
-                                not_neg_edge_list.remove(cur_pos_edge)
-                    pos_edge_list = pos_edge_list_clone
-                    
-                    not_neg_edge_index = torch.LongTensor(not_neg_edge_list).t().contiguous()
-                    pos_edge_index = torch.LongTensor(not_neg_edge_list).t().contiguous()
-                    new_not_neg_edges.append(not_neg_edge_index)
-                    new_pos_edges.append(pos_edge_index)
-                    
-                else:            
-                    output = torch.vstack([pos_score, neg_score]).squeeze()
-                    y = torch.hstack([y_pos,y_neg])            
-                    bce_loss += F.binary_cross_entropy(output, y)
-                    if stage == 2:
-                        bce_loss += self._cal_at_loss(pos_edge, y_pos)
-                    kld_loss += self._kld_gauss(enc_mean_t_sl, enc_std_t_sl, prior_mean_t_sl, prior_std_t_sl)
-                    recon_loss += self._recon_loss(z_t, x, edge_index) 
-                
             all_z.append(z_t)
             all_node_idx.append(node_index)
             all_h.append(h_t_sl)
-            pos_score_list.append(pos_score)
-        bce_loss /= dataloader.__len__()
+            score_list.append(edge_score)
+        bce_loss = torch.squeeze(bce_loss)
         recon_loss /= dataloader.__len__()
         kld_loss /= dataloader.__len__()
-        nce_loss = torch.Tensor([0.0]).to(self.device)
         nce_loss = self.contrastive(all_z, all_node_idx)
-        
-        if self.training == False and stage == 0:
-            return new_pos_edges, new_not_neg_edges       
-        else:
-            return bce_loss, recon_loss + kld_loss, nce_loss, h_t, pos_score_list
+
+        return bce_loss, recon_loss + kld_loss, nce_loss, h_t, score_list
     
     def reset_parameters(self, stdv=1e-1):
         for weight in self.parameters():

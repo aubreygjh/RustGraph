@@ -18,6 +18,23 @@ from utils import *
 from model import  Model
 from dataset import  DynamicGraphAnomaly
 
+def update_reduce_step(cur_step, num_gradual, tau=0.5):
+    return 1.0 - tau * min(cur_step / num_gradual, 1)
+
+def co_teaching_loss(model1_loss, model2_loss, rt):
+    _, model1_sm_idx = torch.topk(model1_loss, k=int(int(model1_loss.size(0)) * rt), largest=False)
+    _, model2_sm_idx = torch.topk(model2_loss, k=int(int(model2_loss.size(0)) * rt), largest=False)
+
+    # co-teaching
+    model1_loss_filter = torch.zeros((model1_loss.size(0))).cuda()
+    model1_loss_filter[model2_sm_idx] = 1.0
+    model1_loss = (model1_loss_filter * model1_loss).mean()
+
+    model2_loss_filter = torch.zeros((model2_loss.size(0))).cuda()
+    model2_loss_filter[model1_sm_idx] = 1.0
+    model2_loss = (model2_loss_filter * model2_loss).mean()
+
+    return model1_loss, model2_loss
 
 def initialize():
     #torch.manual_seed(0)
@@ -63,82 +80,53 @@ if __name__ == '__main__':
     print(len(data_train),len(data_test))
 
     #Init labels
+    train_labels = []  
+    for data in data_train:
+        y = data.y
+        train_labels.append(y.tolist())
+    train_labels = torch.Tensor(train_labels)
+
     test_labels = []  
     for data in data_test:
         y = data.y
         test_labels.append(y.tolist())
     test_labels = np.array(test_labels)
 
-    # edge_save_path_1 = ("./edge_save/" + args.dataset + "_"+ str(args.initial_epochs)+ "_" 
-    #                     + str(args.iter_num) + "_" + str(args.iter_epochs) + "_pos.pt")
-    # edge_save_path_2 = ("./edge_save/" + args.dataset + "_"+ str(args.initial_epochs)+ "_"
-    #                     + str(args.iter_num) + "_" + str(args.iter_epochs) + "_not_neg.pt")
-    edge_save_path_1 = f'./edge_save/{args.dataset}_{args.train_ratio}_{args.anomaly_ratio}_{args.snap_size}_pos.pt'
-    edge_save_path_2 = f'./edge_save/{args.dataset}_{args.train_ratio}_{args.anomaly_ratio}_{args.snap_size}_not_neg.pt'
-    pos_edges, not_neg_edges = [], []
-
-    if os.path.exists(edge_save_path_1) == False or os.path.exists(edge_save_path_2) == False:
-        print("Now begin initial training!")
-        model, optimizer = initialize()
-        model.train()
-        for epoch in tqdm(range(args.initial_epochs)):
-            optimizer.zero_grad()
-            with torch.autograd.set_detect_anomaly(True):
-                bce_loss, gen_loss, con_loss, h_t, _ = model(data_train, 0)
-                loss = bce_loss 
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 10)
-            optimizer.step()
-        print("Now begin iter training!")
-        for iter in range(args.iter_num):
-            print("current: ", iter)
-            model.eval()
-            if iter==0:
-                pos_edges, not_neg_edges = model(data_train, 0)
-            else:
-                pos_edges, not_neg_edges = model(data_train, 0, pos_edges, not_neg_edges)
-            if iter == args.iter_num - 1:
-                break
-            model, optimizer = initialize()
-            model.train()
-            for epoch in tqdm(range(args.iter_epochs)):
-                optimizer.zero_grad()
-                with torch.autograd.set_detect_anomaly(True):
-                    bce_loss, gen_loss, con_loss, h_t, _ = model(data_train, 1, pos_edges, not_neg_edges)
-                    loss = bce_loss
-                    loss.backward()
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), 10)
-                optimizer.step()
-        if args.iter_num > 0:
-            torch.save(pos_edges, edge_save_path_1)
-            torch.save(not_neg_edges, edge_save_path_2)
-    else:
-        pos_edges = torch.load(edge_save_path_1)
-        not_neg_edges = torch.load(edge_save_path_2)
-
-
     #Start Training
-    print("Now begin last training!")
-    model, optimizer = initialize()
+    print("Now begin training!")
+    model1, optimizer1 = initialize()
+    model2, optimizer2 = initialize()
+
     load_time = time.time()
     print(f'\n Total Loading Rime:{(load_time-start_time):.4f}')
-    # model.train() 
     max_auc = 0.0   
     max_epoch = 0
+
+    model1.train()
+    model2.train()
     for epoch in tqdm(range(args.epochs)):
-        model.train()
-        optimizer.zero_grad()
+        rt = update_reduce_step(cur_step=epoch, num_gradual=15)
         with torch.autograd.set_detect_anomaly(True):
-            bce_loss, gen_loss, con_loss, h_t, _ = model(data_train, 2, pos_edges, not_neg_edges) 
-            loss = bce_loss + 1.0 * con_loss + 1.0 * gen_loss  
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 10)
-        optimizer.step()
+            bce_loss1, gen_loss1, con_loss1, h_t1, _ = model1(data_train)
+            bce_loss2, gen_loss2, con_loss2, h_t2, _ = model2(data_train)
+     
+            loss1, loss2 = co_teaching_loss(bce_loss1, bce_loss2, rt=rt)
+            loss1 += args.gen_weight * gen_loss1 + args.con_weight * con_loss1
+            loss2 += args.gen_weight * gen_loss2 + args.con_weight * con_loss2
+            optimizer1.zero_grad()
+            loss1.backward()
+            torch.nn.utils.clip_grad_norm_(model1.parameters(), 10)
+            optimizer1.step()
+
+            optimizer2.zero_grad()
+            loss2.backward()
+            torch.nn.utils.clip_grad_norm_(model2.parameters(), 10)
+            optimizer2.step()
 
         if (epoch+1) % 5 == 0 or epoch == args.epochs-1:
-            model.eval()
+            model1.eval()
             with torch.no_grad():
-                _, _, _, _, score_list = model(data_test, 3, h_t = h_t)
+                _, _, _, _, score_list = model1(data_test, h_t = h_t1)
             score_all = []
             label_all = []
             # log.writelines(f'{epoch}: ')
@@ -158,17 +146,16 @@ if __name__ == '__main__':
             tb.add_scalar('auc_all', auc_all.item(), epoch)
             print(f"overall AUC: {auc_all:.4f}")
 
-        tb.add_scalar('bce_loss', bce_loss.item(), epoch)
-        tb.add_scalar('gen_loss', gen_loss.item(), epoch)
-        tb.add_scalar('con_loss', con_loss.item(), epoch)
-        tb.add_scalar('loss', loss.item(), epoch)
-        # print(f'bce_loss:{bce_loss.item():.4f} + gen_loss: {gen_loss.item():.4f} + con_loss: {con_loss.item():.4f}')
-        # print(f'train_loss: {loss.item():.4f}')
+        # tb.add_scalar('bce_loss', bce_loss1.item(), epoch)
+        # tb.add_scalar('gen_loss', gen_loss1.item(), epoch)
+        # tb.add_scalar('con_loss', con_loss1.item(), epoch)
+        # tb.add_scalar('loss', loss1.item(), epoch)
+
     tb.close()
-    log.writelines("loss\tbce_loss\tgen_loss\tcon_loss\t\n")
-    log.writelines(f'{loss:.3f}\t{bce_loss:.3f}\t{gen_loss:.3f}\t{con_loss:.3f}\t\n')
-    log.writelines(f"MAX AUC: {max_auc:.4f} in epoch: {max_epoch}\n")
+    # log.writelines("loss\tbce_loss\tgen_loss\tcon_loss\t\n")
+    # log.writelines(f'{loss1:.3f}\t{bce_loss1:.3f}\t{gen_loss1:.3f}\t{con_loss1:.3f}\t\n')
+    # log.writelines(f"MAX AUC: {max_auc:.4f} in epoch: {max_epoch}\n")
     print(f'\n Total Training Rime:{(time.time()-load_time):.4f}')
-    torch.save(model.state_dict(), model_file)
+    torch.save(model1.state_dict(), model_file)
     print(f"MAX AUC: {max_auc:.4f} in epoch: {max_epoch}")
     

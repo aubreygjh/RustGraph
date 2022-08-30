@@ -221,15 +221,14 @@ def anomaly_generation2(ini_graph_percent, anomaly_percent, data, n, m,seed = 1)
     # select the other edges as the testing set
     test = data[train_num:, :]
 
-    #data to adjacency_matrix
-    #adjacency_matrix = edgeList2Adj(data)
+    synthetic_test = generate_anomaly(data, test, n, m, anomaly_percent)
+    synthetic_train = generate_anomaly(data, train, n, m, 0.5)
 
-    # clustering nodes to clusters using spectral clustering
-    # kk = 3 #3#10#42#42
-    # sc = SpectralClustering(kk, affinity='precomputed', n_init=10, assign_labels = 'discretize',n_jobs=-1)
-    # labels = sc.fit_predict(adjacency_matrix)
+    print(f'Anomaly injection takes {time.time()-t0}s.')
+    return synthetic_test, synthetic_train 
 
 
+def generate_anomaly(raw_data, inject_data, n, m, anomaly_ratio):
     # generate fake edges that are not exist in the whole graph, treat them as
     # anamalies
     # 真就直接随机生成
@@ -241,41 +240,32 @@ def anomaly_generation2(ini_graph_percent, anomaly_percent, data, n, m,seed = 1)
     #fake_edges = np.array([x for x in generate_edges if labels[x[0] - 1] != labels[x[1] - 1]])
 
     # 移除掉self-loop以及真实边
-    fake_edges = processEdges(fake_edges, data)
+    fake_edges = processEdges(fake_edges, raw_data)
 
     #anomaly_num = 12#int(np.floor(anomaly_percent * np.size(test, 0)))
     # 按比例圈定要的异常边
-    anomaly_num = int(np.floor(anomaly_percent * np.size(test, 0)))
+    anomaly_num = int(np.floor(anomaly_ratio * np.size(inject_data, 0)))
     anomalies = fake_edges[0:anomaly_num, :]
 
     # 按照总边数（测试正常+异常）圈定标签
-    idx_test = np.zeros([np.size(test, 0) + anomaly_num, 1], dtype=np.int32)
+    labels = np.zeros([np.size(inject_data, 0) + anomaly_num, 1], dtype=np.float32)
     # randsample: sample without replacement
     # it's different from datasample!
 
     # 随机选择异常边的位置
-    anomaly_pos = np.random.choice(np.size(idx_test, 0), anomaly_num, replace=False)
+    anomaly_pos = np.random.choice(np.size(labels, 0), anomaly_num, replace=False)
 
     #anomaly_pos = np.random.choice(100, anomaly_num, replace=False)+200
     # 选定的位置定为1
-    idx_test[anomaly_pos] = 1
+    labels[anomaly_pos] = 1
 
     # 汇总数据，按照起点，终点，label的形式填充，并且把对应的idx找出
-    synthetic_test = np.concatenate((np.zeros([np.size(idx_test, 0), 2], dtype=np.int32), idx_test), axis=1)
-    idx_anomalies = np.nonzero(idx_test.squeeze() == 1)
-    idx_normal = np.nonzero(idx_test.squeeze() == 0)
-    synthetic_test[idx_anomalies, 0:2] = anomalies
-    synthetic_test[idx_normal, 0:2] = test
-
-    # coo:efficient for matrix construction ;  csr: efficient for arithmetic operations
-    # coo+to_csr is faster for small matrix, but nearly the same for large matrix (size: over 100M)
-    #train_mat = csr_matrix((np.ones([np.size(train, 0)], dtype=np.int32), (train[:, 0] , train[:, 1])),shape=(n, n))
-    # train_mat = coo_matrix((np.ones([np.size(train, 0)], dtype=np.int32), (train[:, 0], train[:, 1])), shape=(n, n)).tocsr()
-    # sparse(train(:,1), train(:,2), ones(length(train), 1), n, n)
-    # train_mat = train_mat + train_mat.transpose()
-    train = np.concatenate((train, np.zeros([np.size(train, 0),1])), axis=1)
-    print(f'Anomaly injection takes {time.time()-t0}s.')
-    return synthetic_test, train #train_mat
+    synthetic_data = np.concatenate((np.zeros([np.size(labels, 0), 2], dtype=np.float32), labels), axis=1)
+    idx_anomalies = np.nonzero(labels.squeeze() == 1)
+    idx_normal = np.nonzero(labels.squeeze() == 0)
+    synthetic_data[idx_anomalies, 0:2] = anomalies
+    synthetic_data[idx_normal, 0:2] = inject_data
+    return synthetic_data
 
 def processEdges(fake_edges, data):
     """

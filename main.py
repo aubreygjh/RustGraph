@@ -62,7 +62,7 @@ if __name__ == '__main__':
     log_file = os.path.join(log_path, f'snaps{args.snap_size}_train{args.train_ratio}_anomaly{args.anomaly_ratio}_epochs{args.epochs}_lr{args.lr}_xdim{args.x_dim}_hzdim{args.z_dim}_eps{args.eps}_lambda{args.lamda}')
     log = open(log_file, "a")
     log.writelines(time.strftime('%m-%d %H:%M:%S') + "\n")
-    log.writelines(str(args) + "\n")
+    # log.writelines(str(args) + "\n")
     #model
     model_path = f'./models/{args.dataset}/{args.anomaly_ratio}/'
     if not os.path.exists(model_path):
@@ -80,12 +80,6 @@ if __name__ == '__main__':
     print(len(data_train),len(data_test))
 
     #Init labels
-    train_labels = []  
-    for data in data_train:
-        y = data.y
-        train_labels.append(y.tolist())
-    train_labels = torch.Tensor(train_labels)
-
     test_labels = []  
     for data in data_test:
         y = data.y
@@ -129,14 +123,13 @@ if __name__ == '__main__':
                 _, _, _, _, score_list = model1(data_test, h_t = h_t1)
             score_all = []
             label_all = []
-            # log.writelines(f'{epoch}: ')
+
             for t in range(len(score_list)):
                 score = score_list[t].cpu().numpy().squeeze()
                 score_all.append(score)
                 label_all.append(test_labels[t])
                 auc = roc_auc_score(test_labels[t], score)
-            #     log.writelines(f'{auc:.3f}\t')
-            # log.writelines('\n')
+
             score_all = np.hstack(score_all)
             label_all = np.hstack(label_all)
             auc_all = roc_auc_score(label_all, score_all)
@@ -154,7 +147,7 @@ if __name__ == '__main__':
     tb.close()
     # log.writelines("loss\tbce_loss\tgen_loss\tcon_loss\t\n")
     # log.writelines(f'{loss1:.3f}\t{bce_loss1:.3f}\t{gen_loss1:.3f}\t{con_loss1:.3f}\t\n')
-    # log.writelines(f"MAX AUC: {max_auc:.4f} in epoch: {max_epoch}\n")
+    log.writelines(f"MAX AUC: {max_auc:.4f} in epoch: {max_epoch}\n")
     print(f'\n Total Training Rime:{(time.time()-load_time):.4f}')
     torch.save(model1.state_dict(), model_file)
     print(f"MAX AUC: {max_auc:.4f} in epoch: {max_epoch}")

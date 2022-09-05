@@ -49,6 +49,7 @@ def args_parser():
     parser.add_argument('--snap_size', type=int, default=500, help='')
     parser.add_argument('--train_ratio', type=float, default=0.5, help='')
     parser.add_argument('--anomaly_ratio', type=float, default=0.1, help='')
+    parser.add_argument('--noise_ratio', type=float, default=0.0, help='noise ratio')
     # ===== training parameters =====
     parser.add_argument('--initial_epochs', type=int, default=60, help='train for ')
     parser.add_argument('--iter_num', type=int, default=5, help='train for ')

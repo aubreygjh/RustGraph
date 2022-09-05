@@ -1,4 +1,5 @@
 import os
+from sqlite3 import NotSupportedError
 import time
 from datetime import datetime as dt
 import datetime
@@ -103,7 +104,7 @@ def n2v_train(edges, x_dim, device, n, epoch_num):
     x = n2v()
     return x
 
-def generateDataset(dataset, raw_file, device, snap_size, train_per, anomaly_per, x_dim):
+def generateDataset(dataset, raw_file, device, snap_size, train_per, anomaly_per, noise_ratio, x_dim):
     print('Generating data with anomaly for Dataset: ', dataset)
     edges = preprocessDataset(dataset, raw_file)
     edges = edges[:, 0:2].astype(dtype=int)
@@ -135,9 +136,9 @@ def generateDataset(dataset, raw_file, device, snap_size, train_per, anomaly_per
         epoch_num = 50
     x = n2v_train(edges, x_dim, device, n, epoch_num)
     file_name_test = f"./ano_generation/test_{dataset}_{anomaly_per}_{train_per}_{snap_size}.npy"
-    file_name_train = f"./ano_generation/train_{dataset}_{anomaly_per}_{train_per}_{snap_size}.npy"
-    if os.path.exists(file_name_test) == False and os.path.exists(file_name_train)==False:
-        synthetic_test, train = anomaly_generation2(train_per, anomaly_per, edges, n, m, seed=1)
+    file_name_train = f"./ano_generation/train_{dataset}_{anomaly_per}_{train_per}_{snap_size}_{noise_ratio}.npy"
+    if os.path.exists(file_name_test) == False or os.path.exists(file_name_train)==False:
+        synthetic_test, train = anomaly_generation2(train_per, anomaly_per, noise_ratio, edges, n, m, seed=1)
         np.save(file_name_test, synthetic_test)
         np.save(file_name_train, train)
     else:
@@ -179,7 +180,7 @@ def generateDataset(dataset, raw_file, device, snap_size, train_per, anomaly_per
     return data_list, train_size
     
 
-def anomaly_generation2(ini_graph_percent, anomaly_percent, data, n, m,seed = 1):
+def anomaly_generation2(ini_graph_percent, anomaly_percent, noise_ratio, data, n, m,seed = 1):
     """ generate anomaly
     split the whole graph into training network which includes parts of the
     whole graph edges(with ini_graph_percent) and testing edges that includes
@@ -224,6 +225,8 @@ def anomaly_generation2(ini_graph_percent, anomaly_percent, data, n, m,seed = 1)
     synthetic_test = generate_anomaly(data, test, n, m, anomaly_percent)
     synthetic_train = generate_anomaly(data, train, n, m, 0.5)
 
+    # synthetic_test = add_noise(synthetic_test, noise_ratio)
+    synthetic_train = add_noise(synthetic_train, noise_ratio)
     print(f'Anomaly injection takes {time.time()-t0}s.')
     return synthetic_test, synthetic_train 
 
@@ -296,3 +299,14 @@ def processEdges(fake_edges, data):
             c.append(i)
     fake_edges = np.array(c)
     return fake_edges
+
+def add_noise(data, noise_ratio):
+    if noise_ratio == 0:
+        return data
+    if noise_ratio < 0 or noise_ratio > 1:
+        raise NotSupportedError
+    print(f"Adding {noise_ratio} noise into training dataset.")
+    noise_num = int(np.floor(noise_ratio * np.size(data, 0)))
+    noise_idx = np.random.choice(np.size(data, 0), noise_num, replace=False)
+    data[noise_idx, 2] = np.ones(noise_num, dtype=np.float32) - data[noise_idx, 2]
+    return data

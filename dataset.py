@@ -14,10 +14,11 @@ class DynamicGraphAnomaly(InMemoryDataset):
             'enron':''}
     def __init__(self, root, name, args, transform=None, pre_transform=None, pre_filter=None):
         self.dataset = name
-        self.name = name + "_" + str(args.anomaly_ratio) + "_" + str(args.train_ratio) + "_" + str(args.snap_size)
+        self.name = name + "_" + str(args.anomaly_ratio) + "_" + str(args.train_ratio) + "_" + str(args.snap_size) + "_" + str(args.noise_ratio)
         self.snap_size = args.snap_size
         self.train_ratio = args.train_ratio
         self.anomaly_ratio = args.anomaly_ratio
+        self.noise_ratio = args.noise_ratio
         self.device = args.device
         self.x_dim = args.x_dim
         super(DynamicGraphAnomaly, self).__init__(root=root, transform=transform, pre_transform=pre_transform, pre_filter=pre_filter)
@@ -64,7 +65,7 @@ class DynamicGraphAnomaly(InMemoryDataset):
 
     def process(self):
         raw_file = os.path.join(self.raw_dir, self.raw_file_names[0])
-        data_list, train_size = generateDataset(self.dataset, raw_file, self.device, self.snap_size, self.train_ratio, self.anomaly_ratio, self.x_dim)
+        data_list, train_size = generateDataset(self.dataset, raw_file, self.device, self.snap_size, self.train_ratio, self.anomaly_ratio, self.noise_ratio, self.x_dim)
         if self.pre_filter is not None:
             data_list = [data for data in data_list if self.pre_filter(data)]
 

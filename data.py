@@ -251,7 +251,7 @@ def generate_anomaly(raw_data, inject_data, n, m, anomaly_ratio):
     anomalies = fake_edges[0:anomaly_num, :]
 
     # 按照总边数（测试正常+异常）圈定标签
-    labels = np.zeros([np.size(inject_data, 0) + anomaly_num, 1], dtype=np.float32)
+    labels = np.ones([np.size(inject_data, 0) + anomaly_num, 1], dtype=np.float32)
     # randsample: sample without replacement
     # it's different from datasample!
 
@@ -259,13 +259,13 @@ def generate_anomaly(raw_data, inject_data, n, m, anomaly_ratio):
     anomaly_pos = np.random.choice(np.size(labels, 0), anomaly_num, replace=False)
 
     #anomaly_pos = np.random.choice(100, anomaly_num, replace=False)+200
-    # 选定的位置定为1
-    labels[anomaly_pos] = 1
+    # 选定的位置定为0
+    labels[anomaly_pos] = 0
 
     # 汇总数据，按照起点，终点，label的形式填充，并且把对应的idx找出
     synthetic_data = np.concatenate((np.zeros([np.size(labels, 0), 2], dtype=np.float32), labels), axis=1)
-    idx_anomalies = np.nonzero(labels.squeeze() == 1)
-    idx_normal = np.nonzero(labels.squeeze() == 0)
+    idx_anomalies = np.nonzero(labels.squeeze() == 0)
+    idx_normal = np.nonzero(labels.squeeze() == 1)
     synthetic_data[idx_anomalies, 0:2] = anomalies
     synthetic_data[idx_normal, 0:2] = inject_data
     return synthetic_data

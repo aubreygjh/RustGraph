@@ -175,16 +175,21 @@ class Model(nn.Module):
         self.vat_eps = 2.5
 
     
-    def forward(self, dataloader, h_t=None):
+    def forward(self, dataloader, y_rect=None, h_t=None):
         kld_loss = 0
         recon_loss = 0
+        reg_loss = 0
         all_z, all_h, all_node_idx = [], [], []
         score_list = []
+        next_y_list = []
 
         for t, data in enumerate(dataloader):
             data = data.to(self.device)
             x = data.x
-            y = data.y.unsqueeze(1).float()
+            if y_rect == None:
+                y = data.y.unsqueeze(1).float()
+            else:
+                y = y_rect[t]
             edge_index = data.edge_index
             node_index = data.node_index   
             if h_t == None:
@@ -212,6 +217,10 @@ class Model(nn.Module):
             else:
                 bce_loss = torch.vstack([bce_loss, F.binary_cross_entropy(edge_score, y, reduction='none')])
             # bce_loss += self._cal_at_loss(pos_edge, y_pos)
+            label_rectifier = self.dec(z_t, edge_index, sigmoid=True)
+            label_rectifier = label_rectifier.unsqueeze(1)
+            next_y_list.append((0.9*y+0.1*label_rectifier).detach())
+            reg_loss += torch.norm(label_rectifier-edge_score, dim=1, p=2).mean()#0异常 1正常
             kld_loss += self._kld_gauss(enc_mean_t_sl, enc_std_t_sl, prior_mean_t_sl, prior_std_t_sl)
             recon_loss += self._recon_loss(z_t, x, edge_index) 
             
@@ -219,12 +228,13 @@ class Model(nn.Module):
             all_node_idx.append(node_index)
             all_h.append(h_t_sl)
             score_list.append(edge_score)
-        bce_loss = torch.squeeze(bce_loss)
+        bce_loss = bce_loss.squeeze() #torch.squeeze(bce_loss)
+        reg_loss /= dataloader.__len__()
         recon_loss /= dataloader.__len__()
         kld_loss /= dataloader.__len__()
         nce_loss = self.contrastive(all_z, all_node_idx)
 
-        return bce_loss, recon_loss + kld_loss, nce_loss, h_t, score_list
+        return bce_loss+0.1*reg_loss, recon_loss + kld_loss, nce_loss, next_y_list, h_t, score_list
     
     def reset_parameters(self, stdv=1e-1):
         for weight in self.parameters():
@@ -262,14 +272,16 @@ class Model(nn.Module):
     def _recon_loss(self, z, x, pos_edge_index, neg_edge_index=None):        
         x_hat = self.linear(z)
         feature_loss = self.mse(x, x_hat)
-        pos_loss = -torch.log(self.dec(z, pos_edge_index, sigmoid=True) + self.EPS).mean()
+        weight = torch.sigmoid(torch.exp(-torch.norm(z[pos_edge_index[0]] - z[pos_edge_index[1]], dim=1, p=2)))
+        pos_loss = (-torch.log(self.dec(z, pos_edge_index) + self.EPS)*weight).mean()
 
         # Do not include self-loops in negative samples
         pos_edge_index, _ = remove_self_loops(pos_edge_index)
         pos_edge_index, _ = add_self_loops(pos_edge_index)
         if neg_edge_index is None:
             neg_edge_index = negative_sampling(pos_edge_index, z.size(0))
-        neg_loss = -torch.log(1 - self.dec(z, neg_edge_index, sigmoid=True) + self.EPS).mean()
+        weight = torch.sigmoid(torch.exp(torch.norm(z[neg_edge_index[0]] - z[neg_edge_index[1]], dim=1, p=2)))
+        neg_loss = (-torch.log(1 - self.dec(z, neg_edge_index) + self.EPS)*weight).mean()
         return pos_loss + neg_loss + feature_loss
 
 

@@ -98,12 +98,15 @@ if __name__ == '__main__':
 
     model1.train()
     model2.train()
+    y_new1 = None
+    y_new2 = None
     for epoch in tqdm(range(args.epochs)):
         rt = update_reduce_step(cur_step=epoch, num_gradual=15)
         with torch.autograd.set_detect_anomaly(True):
-            bce_loss1, gen_loss1, con_loss1, h_t1, _ = model1(data_train)
-            bce_loss2, gen_loss2, con_loss2, h_t2, _ = model2(data_train)
-     
+            bce_loss1, gen_loss1, con_loss1, y_new1, h_t1, _ = model1(data_train, y_rect=y_new2)
+            bce_loss2, gen_loss2, con_loss2, y_new2, h_t2, _ = model2(data_train, y_rect=y_new1)
+            
+            # loss1 = bce_loss1.mean()
             loss1, loss2 = co_teaching_loss(bce_loss1, bce_loss2, rt=rt)
             loss1 += args.gen_weight * gen_loss1 + args.con_weight * con_loss1
             loss2 += args.gen_weight * gen_loss2 + args.con_weight * con_loss2
@@ -120,7 +123,7 @@ if __name__ == '__main__':
         if (epoch+1) % 5 == 0 or epoch == args.epochs-1:
             model1.eval()
             with torch.no_grad():
-                _, _, _, _, score_list = model1(data_test, h_t = h_t1)
+                _, _, _, _,_, score_list = model1(data_test, h_t=h_t1)
             score_all = []
             label_all = []
 

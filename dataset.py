@@ -14,7 +14,7 @@ class DynamicGraphAnomaly(InMemoryDataset):
             'enron':''}
     def __init__(self, root, name, args, transform=None, pre_transform=None, pre_filter=None):
         self.dataset = name
-        self.name = name + "_" + str(args.anomaly_ratio) + "_" + str(args.train_ratio) + "_" + str(args.snap_size) + "_" + str(args.noise_ratio)
+        self.name = name + "_" + str(args.anomaly_ratio) + "_" + str(args.train_ratio) + "_" + str(args.noise_ratio) + "_" + str(args.x_dim)
         self.snap_size = args.snap_size
         self.train_ratio = args.train_ratio
         self.anomaly_ratio = args.anomaly_ratio
@@ -26,11 +26,11 @@ class DynamicGraphAnomaly(InMemoryDataset):
         self.train_size = torch.load(self.processed_paths[1])
     @property
     def raw_dir(self):
-        return os.path.join(self.root, self.name, 'raw')
+        return os.path.join(self.root, self.dataset, 'raw')
 
     @property
     def processed_dir(self):
-        return os.path.join(self.root, self.name, 'processed')
+        return os.path.join(self.root, self.dataset, self.name)
     
     @property
     def raw_file_names(self):

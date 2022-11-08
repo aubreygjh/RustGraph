@@ -12,8 +12,7 @@ then
         for b in "${b_lst[@]}"; do
             for c in "${c_lst[@]}"; do
                 CUDA_VISIBLE_DEVICES=0 python main.py --dataset $dataset --snap_size 1000 --train_ratio 0.5 --anomaly_ratio $anomaly_ratio  \
-                --epoch 200 --lr 0.001 --initial_epochs 60 --iter_num 5 --iter_epochs 60 \
-                --x_dim 256 --h_dim 256 --z_dim 256 \
+                --epoch 200 --lr 0.001 --x_dim 256 --h_dim 256 --z_dim 256 \
                 --gen_loss_weight $a --con_loss_weight $b --at_alpha $c
             done
         done
@@ -24,8 +23,7 @@ then
         for b in "${b_lst[@]}"; do
             for c in "${c_lst[@]}"; do
                 CUDA_VISIBLE_DEVICES=1 python main.py --dataset $dataset --snap_size 1000 --train_ratio 0.5 --anomaly_ratio $anomaly_ratio  \
-                --epoch 400 --lr 0.0001 --initial_epochs 60 --iter_num 5 --iter_epochs 60 \
-                --x_dim 64 --h_dim 64 --z_dim 64  \
+                --epoch 400 --lr 0.0001 --x_dim 64 --h_dim 64 --z_dim 64  \
                 --gen_loss_weight $a --con_loss_weight $b --at_alpha $c
             done
         done

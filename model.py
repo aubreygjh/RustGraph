@@ -151,28 +151,26 @@ class Model(nn.Module):
     def __init__(self, args):
         super(Model, self).__init__()
         self.encoder = Generative(args.x_dim, args.h_dim, args.z_dim, args.layer_num, args.device)
-        self.prediction = MLP(args.z_dim, args.z_dim, args.z_dim * 8)
-        # self.prediction = MLP(args.z_dim, args.z_dim, 32)
         self.contrastive = Contrastive(args.device, args.z_dim, args.window)
         self.dec = InnerProductDecoder()
         self.mse = nn.MSELoss(reduction='mean')
         self.fcc = FCC(args.z_dim, 1, args.device)
         self.linear = nn.Sequential(nn.Linear(args.z_dim, args.x_dim), nn.ReLU())
+
         self.eps = args.eps
         self.device = args.device
         self.layer_num = args.layer_num
         self.h_dim = args.h_dim
         self.z_dim = args.z_dim
-        self.lamda = args.lamda
         self.EPS = 1e-15
-        self.at_eps = 0.05
-        self.at_alpha = args.at_alpha
-        self.gamma = 1
-        
-        self.vat_alpha = 0.1
-        self.vat_iter = 1
-        self.vat_xi = 1e-6
-        self.vat_eps = 2.5
+        # self.lamda = args.lamda
+        # self.at_eps = 0.05
+        # self.at_alpha = args.at_alpha
+        # self.gamma = 1
+        # self.vat_alpha = 0.1
+        # self.vat_iter = 1
+        # self.vat_xi = 1e-6
+        # self.vat_eps = 2.5
 
     
     def forward(self, dataloader, y_rect=None, h_t=None):
@@ -228,13 +226,13 @@ class Model(nn.Module):
             all_node_idx.append(node_index)
             all_h.append(h_t_sl)
             score_list.append(edge_score)
-        bce_loss = bce_loss.squeeze() #torch.squeeze(bce_loss)
+        bce_loss = bce_loss.squeeze() 
         reg_loss /= dataloader.__len__()
         recon_loss /= dataloader.__len__()
         kld_loss /= dataloader.__len__()
         nce_loss = self.contrastive(all_z, all_node_idx)
 
-        return bce_loss+0.1*reg_loss, recon_loss + kld_loss, nce_loss, next_y_list, h_t, score_list
+        return bce_loss, reg_loss, recon_loss + kld_loss, nce_loss, next_y_list, h_t, score_list
     
     def reset_parameters(self, stdv=1e-1):
         for weight in self.parameters():
@@ -300,63 +298,63 @@ class Model(nn.Module):
         ev = torch.from_numpy(ev)
         return ev 
 
-    def _l2_normalize(self, d):
-        size = len(d.size())
-        d = d.numpy()
-        if size == 2:
-            d /= (np.sqrt(np.sum(d ** 2, axis=(1))).reshape((-1, 1)) + 1e-16)
-        if size == 3:
-            d /= (np.sqrt(np.sum(d ** 2, axis=(1, 2))).reshape((-1, 1, 1)) + 1e-16)
-        return torch.from_numpy(d)
+    # def _l2_normalize(self, d):
+    #     size = len(d.size())
+    #     d = d.numpy()
+    #     if size == 2:
+    #         d /= (np.sqrt(np.sum(d ** 2, axis=(1))).reshape((-1, 1)) + 1e-16)
+    #     if size == 3:
+    #         d /= (np.sqrt(np.sum(d ** 2, axis=(1, 2))).reshape((-1, 1, 1)) + 1e-16)
+    #     return torch.from_numpy(d)
     
-    def _cal_at_loss(self, edge_rep, label, weight = None, cal_loss = True):
-        # total_rep = torch.vstack([pos_rep, neg_rep])
-        edge_score = self.fcc(edge_rep).squeeze()
-        label = label.float()
-        if weight != None:
-            weight = Variable(torch.pow(torch.abs(edge_score.sub(label)), self.gamma))
-        at_loss = F.binary_cross_entropy(edge_score, label, weight)
-        rep_grad = grad(at_loss, edge_rep, retain_graph=True)
-        r_adv = torch.FloatTensor(self.at_eps * self._l2_normalize(rep_grad[0].data.cpu()))
-        r_adv = Variable(r_adv.to(self.device))
-        at_score = self.fcc(edge_rep + r_adv.detach()).squeeze()
-        self.zero_grad()
-        if cal_loss == False:
-            return torch.abs(at_score - edge_score)
-        if weight != None:
-            weight = Variable(torch.pow(torch.abs(at_score.sub(label)), self.gamma))
-        at_loss = self.at_alpha * F.binary_cross_entropy(at_score, label, weight)
-        return at_loss
+    # def _cal_at_loss(self, edge_rep, label, weight = None, cal_loss = True):
+    #     # total_rep = torch.vstack([pos_rep, neg_rep])
+    #     edge_score = self.fcc(edge_rep).squeeze()
+    #     label = label.float()
+    #     if weight != None:
+    #         weight = Variable(torch.pow(torch.abs(edge_score.sub(label)), self.gamma))
+    #     at_loss = F.binary_cross_entropy(edge_score, label, weight)
+    #     rep_grad = grad(at_loss, edge_rep, retain_graph=True)
+    #     r_adv = torch.FloatTensor(self.at_eps * self._l2_normalize(rep_grad[0].data.cpu()))
+    #     r_adv = Variable(r_adv.to(self.device))
+    #     at_score = self.fcc(edge_rep + r_adv.detach()).squeeze()
+    #     self.zero_grad()
+    #     if cal_loss == False:
+    #         return torch.abs(at_score - edge_score)
+    #     if weight != None:
+    #         weight = Variable(torch.pow(torch.abs(at_score.sub(label)), self.gamma))
+    #     at_loss = self.at_alpha * F.binary_cross_entropy(at_score, label, weight)
+    #     return at_loss
     
-    def _kl_with_logit(self, q, p, reduction="batchmean"):
-        logq = torch.log(q)
-        loss = F.kl_div(logq, p, reduction = reduction)
-        return loss
+    # def _kl_with_logit(self, q, p, reduction="batchmean"):
+    #     logq = torch.log(q)
+    #     loss = F.kl_div(logq, p, reduction = reduction)
+    #     return loss
     
-    def _cal_vat_loss(self, edge_index, node_emb):
-        embed_size = node_emb.size()
-        d = torch.Tensor(torch.Size(embed_size)).normal_().to(self.device)
-        new_node_emb = node_emb + d
-        edge_rep = new_node_emb[edge_index[0]] + new_node_emb[edge_index[1]]
-        y_f = self.fcc(edge_rep).squeeze()
-        for _ in range(self.vat_iter):
-            d = self.vat_xi * self._l2_normalize(d.cpu())
-            d = Variable(d.to(self.device), requires_grad=True)
-            new_node_emb = node_emb + d
-            edge_rep = new_node_emb[edge_index[0]] + new_node_emb[edge_index[1]]
-            y_n = self.fcc(edge_rep).squeeze()
-            delta_kl = self._kl_with_logit(y_n, y_f.detach())
-            delta_kl.backward(retain_graph=True)
-            d = d.grad.data.clone().cpu()
-            self.zero_grad()
-        d = self._l2_normalize(d.cpu())
-        d = Variable(d.to(self.device))
-        r_adv = self.vat_eps * d
-        new_node_emb = node_emb + d
-        edge_rep = new_node_emb[edge_index[0]] + new_node_emb[edge_index[1]]
-        y_e = self.fcc(edge_rep).squeeze()
-        vat_loss = self.vat_alpha * self._kl_with_logit(y_e, y_f.detach())
-        return vat_loss
+    # def _cal_vat_loss(self, edge_index, node_emb):
+    #     embed_size = node_emb.size()
+    #     d = torch.Tensor(torch.Size(embed_size)).normal_().to(self.device)
+    #     new_node_emb = node_emb + d
+    #     edge_rep = new_node_emb[edge_index[0]] + new_node_emb[edge_index[1]]
+    #     y_f = self.fcc(edge_rep).squeeze()
+    #     for _ in range(self.vat_iter):
+    #         d = self.vat_xi * self._l2_normalize(d.cpu())
+    #         d = Variable(d.to(self.device), requires_grad=True)
+    #         new_node_emb = node_emb + d
+    #         edge_rep = new_node_emb[edge_index[0]] + new_node_emb[edge_index[1]]
+    #         y_n = self.fcc(edge_rep).squeeze()
+    #         delta_kl = self._kl_with_logit(y_n, y_f.detach())
+    #         delta_kl.backward(retain_graph=True)
+    #         d = d.grad.data.clone().cpu()
+    #         self.zero_grad()
+    #     d = self._l2_normalize(d.cpu())
+    #     d = Variable(d.to(self.device))
+    #     r_adv = self.vat_eps * d
+    #     new_node_emb = node_emb + d
+    #     edge_rep = new_node_emb[edge_index[0]] + new_node_emb[edge_index[1]]
+    #     y_e = self.fcc(edge_rep).squeeze()
+    #     vat_loss = self.vat_alpha * self._kl_with_logit(y_e, y_f.detach())
+    #     return vat_loss
     '''
     def _cal_vat_loss(self, neg_index, z, logits):
         node_emb = z

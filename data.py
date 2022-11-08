@@ -112,31 +112,17 @@ def generateDataset(dataset, raw_file, device, snap_size, train_per, anomaly_per
     m = len(edges)
     n = len(vertices)
     
-    # edge_index = torch.LongTensor(edges).t().contiguous()
-    # n2v = Node2Vec(edge_index=edge_index, embedding_dim=x_dim,walk_length=25,context_size=25, num_nodes=n).to(device)
-    # loader = n2v.loader(batch_size=128, shuffle=True, num_workers=4)
-    # optimizer = torch.optim.Adam(list(n2v.parameters()), lr=0.01)
-    # def train():
-    #     n2v.train()
-    #     total_loss = 0
-    #     for pos_rw, neg_rw in loader:
-    #         optimizer.zero_grad()
-    #         loss = n2v.loss(pos_rw.to(device), neg_rw.to(device))
-    #         loss.backward()
-    #         optimizer.step()
-    #         total_loss += loss.item()
-    #     return total_loss / len(loader)
-    # for epoch in range(1, 100):
-    #     loss = train()
-    #     print(f'Epoch: {epoch:02d}, Loss: {loss:.4f}')
-    # x = n2v()
     if dataset == 'digg':
         epoch_num = 75
     else:
         epoch_num = 50
     x = n2v_train(edges, x_dim, device, n, epoch_num)
-    file_name_test = f"./ano_generation/test_{dataset}_{anomaly_per}_{train_per}_{snap_size}.npy"
-    file_name_train = f"./ano_generation/train_{dataset}_{anomaly_per}_{train_per}_{snap_size}_{noise_ratio}.npy"
+
+    anomaly_dir = f'ano_generation/{dataset}'
+    if not os.path.exists(anomaly_dir):
+        os.makedirs(anomaly_dir)
+    file_name_test = os.path.join(anomaly_dir, f'test_{anomaly_per}_{train_per}_{noise_ratio}.npy')
+    file_name_train = os.path.join(anomaly_dir, f'train_{anomaly_per}_{train_per}_{noise_ratio}.npy')
     if os.path.exists(file_name_test) == False or os.path.exists(file_name_train)==False:
         synthetic_test, train = anomaly_generation2(train_per, anomaly_per, noise_ratio, edges, n, m, seed=1)
         np.save(file_name_test, synthetic_test)
@@ -144,14 +130,12 @@ def generateDataset(dataset, raw_file, device, snap_size, train_per, anomaly_per
     else:
         synthetic_test = np.load(file_name_test)
         train = np.load(file_name_train)
-    # synthetic_test, train = anomaly_generation2(train_per, anomaly_per, edges, n, m, seed=1)
     train_size = int(len(train) / snap_size + 0.5)
     test_size = int(len(synthetic_test) / snap_size + 0.5)
     print(train_size, test_size)
 
     data_list = []
     for ii in range(train_size):
-        print('train:', ii)
         start_loc = ii * snap_size
         end_loc = (ii + 1) * snap_size
         edge_index = train[start_loc:end_loc, 0:2]
@@ -164,7 +148,6 @@ def generateDataset(dataset, raw_file, device, snap_size, train_per, anomaly_per
         data = Data(x=x, edge_index=edge_index,node_index=node_index,y=y, edge_attr=edge_attr)
         data_list.append(data)
     for ii in range(test_size):
-        print('test:', ii)
         start_loc = ii * snap_size
         end_loc = (ii + 1) * snap_size
         edge_index = synthetic_test[start_loc:end_loc, 0:2]

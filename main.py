@@ -50,28 +50,31 @@ if __name__ == '__main__':
     np.random.seed(SEED)
     start_time = time.time()
     args = args_parser()
+
     #tensorboard
     tb_path = f'runs/{args.dataset}/{args.anomaly_ratio}/'
     if not os.path.exists(tb_path):
         os.makedirs(tb_path)
-    tb = SummaryWriter(logdir=tb_path+f"{time.strftime('%m-%d,%H:%M:%S')}_snaps{args.snap_size}_train{args.train_ratio}_anomaly{args.anomaly_ratio}_epochs{args.epochs}_lr{args.lr}_xdim{args.x_dim}_hzdim{args.z_dim}_eps{args.eps}_lambda{args.lamda}")
+    tb = SummaryWriter(logdir=tb_path+f"{time.strftime('%m-%d,%H:%M:%S')}")
+
     #log
-    log_path = f'logs/{args.dataset}/{args.anomaly_ratio}/'
+    log_path = f'logs/{args.dataset}/'
     if not os.path.exists(log_path):
         os.makedirs(log_path)
-    log_file = os.path.join(log_path, f'snaps{args.snap_size}_train{args.train_ratio}_anomaly{args.anomaly_ratio}_epochs{args.epochs}_lr{args.lr}_xdim{args.x_dim}_hzdim{args.z_dim}_eps{args.eps}_lambda{args.lamda}')
+    log_file = os.path.join(log_path, f'{args.anomaly_ratio}')
     log = open(log_file, "a")
     log.writelines(time.strftime('%m-%d %H:%M:%S') + "\n")
     # log.writelines(str(args) + "\n")
+
     #model
-    model_path = f'./models/{args.dataset}/{args.anomaly_ratio}/'
-    if not os.path.exists(model_path):
-        os.makedirs(model_path)
-    model_file = os.path.join(model_path, f'snaps{args.snap_size}_train{args.train_ratio}_anomaly{args.anomaly_ratio}_epochs{args.epochs}_lr{args.lr}_xdim{args.x_dim}_hzdim{args.z_dim}_eps{args.eps}_lambda{args.lamda}.pkl')
+    # model_path = f'models/{args.dataset}/'
+    # if not os.path.exists(model_path):
+    #     os.makedirs(model_path)
+    # model_file = os.path.join(model_path, f'{args.anomaly_ratio}.pkl')
 
     #Init dataloader
     dataset = []
-    if args.dataset not in ['uci', 'digg', 'btc_alpha', 'btc_otc', 'email', 'as_topology', 'hepth']:
+    if args.dataset not in ['uci', 'digg', 'btc_alpha', 'btc_otc', 'email', 'as_topology']:
         raise NotImplementedError
     dataset = DynamicGraphAnomaly(root='dataset', name=args.dataset, args=args)
     train_size = dataset.train_size
@@ -103,27 +106,27 @@ if __name__ == '__main__':
     for epoch in tqdm(range(args.epochs)):
         rt = update_reduce_step(cur_step=epoch, num_gradual=15)
         with torch.autograd.set_detect_anomaly(True):
-            bce_loss1, gen_loss1, con_loss1, y_new1, h_t1, _ = model1(data_train, y_rect=y_new2)
-            bce_loss2, gen_loss2, con_loss2, y_new2, h_t2, _ = model2(data_train, y_rect=y_new1)
+            bce_loss1, reg_loss1, gen_loss1, con_loss1, y_new1, h_t1, _ = model1(data_train, y_rect=y_new1)
+            # bce_loss2, reg_loss2, gen_loss2, con_loss2, y_new2, h_t2, _ = model2(data_train, y_rect=y_new1)
             
-            # loss1 = bce_loss1.mean()
-            loss1, loss2 = co_teaching_loss(bce_loss1, bce_loss2, rt=rt)
-            loss1 += args.gen_weight * gen_loss1 + args.con_weight * con_loss1
-            loss2 += args.gen_weight * gen_loss2 + args.con_weight * con_loss2
+            loss1 = bce_loss1.mean()
+            # loss1, loss2 = co_teaching_loss(bce_loss1, bce_loss2, rt=rt)
+            loss1 += args.reg_weight * reg_loss1 + args.gen_weight * gen_loss1 + args.con_weight * con_loss1
+            # loss2 += args.reg_weight * reg_loss2 + args.gen_weight * gen_loss2 + args.con_weight * con_loss2
             optimizer1.zero_grad()
             loss1.backward()
             torch.nn.utils.clip_grad_norm_(model1.parameters(), 10)
             optimizer1.step()
 
-            optimizer2.zero_grad()
-            loss2.backward()
-            torch.nn.utils.clip_grad_norm_(model2.parameters(), 10)
-            optimizer2.step()
+            # optimizer2.zero_grad()
+            # loss2.backward()
+            # torch.nn.utils.clip_grad_norm_(model2.parameters(), 10)
+            # optimizer2.step()
 
         if (epoch+1) % 5 == 0 or epoch == args.epochs-1:
             model1.eval()
             with torch.no_grad():
-                _, _, _, _,_, score_list = model1(data_test, h_t=h_t1)
+                _, _, _, _, _,_, score_list = model1(data_test, h_t=h_t1)
             score_all = []
             label_all = []
 
@@ -142,16 +145,16 @@ if __name__ == '__main__':
             tb.add_scalar('auc_all', auc_all.item(), epoch)
             print(f"overall AUC: {auc_all:.4f}")
 
-        # tb.add_scalar('bce_loss', bce_loss1.item(), epoch)
-        # tb.add_scalar('gen_loss', gen_loss1.item(), epoch)
-        # tb.add_scalar('con_loss', con_loss1.item(), epoch)
-        # tb.add_scalar('loss', loss1.item(), epoch)
+        tb.add_scalar('bce_loss', bce_loss1.mean().item(), epoch)
+        tb.add_scalar('reg_loss', reg_loss1.item(), epoch)
+        tb.add_scalar('gen_loss', gen_loss1.item(), epoch)
+        tb.add_scalar('con_loss', con_loss1.item(), epoch)
+        tb.add_scalar('loss', loss1.item(), epoch)
 
     tb.close()
-    # log.writelines("loss\tbce_loss\tgen_loss\tcon_loss\t\n")
-    # log.writelines(f'{loss1:.3f}\t{bce_loss1:.3f}\t{gen_loss1:.3f}\t{con_loss1:.3f}\t\n')
-    log.writelines(f"MAX AUC: {max_auc:.4f} in epoch: {max_epoch}\n")
+    log.writelines(f"MAX AUC: {max_auc:.4f} in epoch: {max_epoch},\t")
+    log.writelines(f"Last AUC: {auc_all:.4f}\n")
     print(f'\n Total Training Rime:{(time.time()-load_time):.4f}')
-    torch.save(model1.state_dict(), model_file)
+    # torch.save(model1.state_dict(), model_file)
     print(f"MAX AUC: {max_auc:.4f} in epoch: {max_epoch}")
     

@@ -93,12 +93,11 @@ class Generative(nn.Module):
     
     def forward(self, x, h, diff, edge_index):
         phiX = self.phi_x(x)
-        # enc_x = self.enc(torch.cat([phiX, h[-1], diff], 1), edge_index)
         enc_x = self.enc(torch.cat([phiX, h[-1]], 1), edge_index)
         enc_x_mean = self.enc_mean(enc_x, edge_index)
         enc_x_std = self.enc_std(enc_x, edge_index)
         prior_x = self.prior(torch.cat([h[-1], diff], 1))
-        # prior_x = self.prior(h[-1])
+        # prior_x = torch.randn(prior_x.shape).cuda()
         prior_x_mean = self.prior_mean(prior_x)
         prior_x_std = self.prior_std(prior_x)
         z = self.random_sample(enc_x_mean, enc_x_std)
@@ -188,6 +187,7 @@ class Model(nn.Module):
                 y = data.y.unsqueeze(1).float()
             else:
                 y = y_rect[t]
+            # y = data.y.unsqueeze(1).float()
             edge_index = data.edge_index
             node_index = data.node_index   
             if h_t == None:

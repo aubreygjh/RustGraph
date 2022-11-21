@@ -65,6 +65,7 @@ def args_parser():
     # ===== hyper-parameters =====
     parser.add_argument('--window', type=int, default=1, help='')
     parser.add_argument('--eps', type=float, default=0.2, help='eps')
+    parser.add_argument('--bce_weight', type=float, default=1, help='')
     parser.add_argument('--gen_weight', type=float, default=1, help='')
     parser.add_argument('--con_weight', type=float, default=1, help='')
     parser.add_argument('--reg_weight', type=float, default=1, help='')

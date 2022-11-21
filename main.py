@@ -111,8 +111,8 @@ if __name__ == '__main__':
             
             loss1 = bce_loss1.mean()
             # loss1, loss2 = co_teaching_loss(bce_loss1, bce_loss2, rt=rt)
-            loss1 += args.reg_weight * reg_loss1 + args.gen_weight * gen_loss1 + args.con_weight * con_loss1
-            # loss2 += args.reg_weight * reg_loss2 + args.gen_weight * gen_loss2 + args.con_weight * con_loss2
+            loss1 = args.bce_weight * loss1 + args.reg_weight * reg_loss1 + args.gen_weight * gen_loss1 + args.con_weight * con_loss1
+            # loss2 = args.bce_weight * loss2 + args.reg_weight * reg_loss2 + args.gen_weight * gen_loss2 + args.con_weight * con_loss2
             optimizer1.zero_grad()
             loss1.backward()
             torch.nn.utils.clip_grad_norm_(model1.parameters(), 10)
@@ -142,6 +142,14 @@ if __name__ == '__main__':
             if max_auc <= auc_all:
                 max_auc = auc_all
                 max_epoch = epoch
+            # ###train_ratio exp
+            # if epoch == args.epochs-1:
+            #     for t in range(len(score_list)):
+            #         score = score_list[t].cpu().numpy().squeeze()
+            #         auc = roc_auc_score(test_labels[t], score)
+            #         log.writelines(f"{auc:.4f}, ")
+            #     log.writelines("\n")
+            
             tb.add_scalar('auc_all', auc_all.item(), epoch)
             print(f"overall AUC: {auc_all:.4f}")
 

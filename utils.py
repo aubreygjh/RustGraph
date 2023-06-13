@@ -1,34 +1,31 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-'''
-@File    :   utils.py
-@Time    :   2021/08/19 12:33:05
-@Author  :   Guo Jianhao 
-'''
-import os
+
 import argparse
-import networkx as nx
-import matplotlib.pyplot as plt  
+import os
+# import networkx as nx
+# import matplotlib.pyplot as plt  
 
 # #visualize graphs
 # for i,graph in enumerate(data):
 #     draw(graph.edge_index, graph.y, i)
-def draw(edge_index, y, name=None):
-    G = nx.MultiGraph(node_size=15, font_size=8)
-    src = edge_index[0].cpu().numpy()
-    dst = edge_index[1].cpu().numpy()
-    edgelist = zip(src, dst)
-    for i, j in edgelist:
-        G.add_edge(i, j)
-    plt.figure(figsize=(20, 14)) # 设置画布的大小
-    if y == 1:
-        nx.draw_networkx(G,node_color="red")
-    else:
-        nx.draw_networkx(G,node_color="blue")
-    if not os.path.exists('figs'):
-        os.mkdir('figs')
-    plt.savefig('figs/{}.png'.format(name if name else 'path'))
-    print(f'Saved fig-{name}.')
+
+# def draw(edge_index, y, name=None):
+#     G = nx.MultiGraph(node_size=15, font_size=8)
+#     src = edge_index[0].cpu().numpy()
+#     dst = edge_index[1].cpu().numpy()
+#     edgelist = zip(src, dst)
+#     for i, j in edgelist:
+#         G.add_edge(i, j)
+#     plt.figure(figsize=(20, 14)) # 设置画布的大小
+#     if y == 1:
+#         nx.draw_networkx(G,node_color="red")
+#     else:
+#         nx.draw_networkx(G,node_color="blue")
+#     if not os.path.exists('figs'):
+#         os.mkdir('figs')
+#     plt.savefig('figs/{}.png'.format(name if name else 'path'))
+#     print(f'Saved fig-{name}.')
     
 def str2bool(v):
     if isinstance(v, bool):
@@ -46,19 +43,13 @@ def args_parser():
 
     # ===== dataset parameters =====
     parser.add_argument('--dataset', type=str, default='uci', help='name of dataset')
-    # parser.add_argument('--snaps', type=int, default=100, help='')
     parser.add_argument('--snap_size', type=int, default=500, help='')
     parser.add_argument('--train_ratio', type=float, default=0.5, help='')
     parser.add_argument('--anomaly_ratio', type=float, default=0.1, help='')
     parser.add_argument('--noise_ratio', type=float, default=0.0, help='noise ratio')
 
     # ===== training parameters =====
-    # parser.add_argument('--initial_epochs', type=int, default=60, help='train for ')
-    # parser.add_argument('--iter_num', type=int, default=5, help='train for ')
-    # parser.add_argument('--iter_epochs', type=int, default=60, help='train for ')
-    # parser.add_argument('--warmup_epochs', type=int, default=20, help='warmup epochs')
     parser.add_argument('--epochs', type=int, default=250, help='training epochs')
-    # parser.add_argument('--warmup_lr', type=float, default=0.001, help='warmup lr')
     parser.add_argument('--lr', type=float, default=0.001, help='learning rate')
     parser.add_argument('--weight_decay', type=float, default=0.01, help='weight decay')
 
@@ -69,19 +60,12 @@ def args_parser():
     parser.add_argument('--gen_weight', type=float, default=1, help='')
     parser.add_argument('--con_weight', type=float, default=1, help='')
     parser.add_argument('--reg_weight', type=float, default=1, help='')
-    # parser.add_argument('--at_alpha', type=float, default=1, help='at_alpha')
-    # parser.add_argument('--lamda', type=float, default=1, help='lamda_1')
-    # parser.add_argument('--lamda_2', type=float, default=1, help='lamda_1')
-    # parser.add_argument('--threshold', type=float, default=2.9, help='anomaly threshold')
 
     # ===== model parameters =====
     parser.add_argument('--layer_num', type=int, default=2, help='rnn layers')
     parser.add_argument('--x_dim', type=int, default=256, help='input channels of the model')
     parser.add_argument('--h_dim', type=int, default=256, help='hidden channels of the model')
     parser.add_argument('--z_dim', type=int, default=256, help='output channels of the model')
-    # parser.add_argument('--en_dim', type=int, default=64, help='dimension of hidden layer of AE')
-    # parser.add_argument('--sample_num', type=int, default=8, help='number of samples for contrastive learning')
-    # parser.add_argument('--momentum', type=float, default=0.4)
 
     # ===== may remove in the future =====
      # parser.add_argument('--hidden_dim_rnn', type=int, default=256, help='hidden channels of rnn')
@@ -99,9 +83,6 @@ def exp_details(args):
     print('\nExperimental details:')
     print(f'    Dataset     : {args.dataset}')
     print(f'    Device      : {args.device}')
-    # print(f'    Multi-GPU   : {args.multi_gpu}')
-    # print(f'    Model     : {args.model}')
-    # print(f'    Optimizer : {args.optimizer}')
     print(f'    Learning Rate   : {args.lr}')
     print(f'    Training Epochs : {args.epochs}')
 

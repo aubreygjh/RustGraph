@@ -1,8 +1,6 @@
 /dataset
 /runs
-/runs_old
 /__pycache__
 /ano_generation
-/edge_save
 /models
 /logs

@@ -7,6 +7,8 @@ import numpy as np
 import torch
 from torch_geometric.data import Data
 from torch_geometric.nn import Node2Vec
+
+'''
 def hepth(link_file, date_file, raw_file):
     node_date = dict()
     with open(date_file) as f:
@@ -33,76 +35,8 @@ def hepth(link_file, date_file, raw_file):
     links = np.array(links)
     np.savetxt(raw_file, links)
     return 
+'''
 
-def preprocessDataset(dataset,raw_file):
-    print('Preprocess dataset: ' + dataset)
-    if dataset in ['digg', 'uci', 'as_topology']:
-        edges = np.loadtxt(raw_file, dtype=float, comments='%', delimiter=' ')
-        edges = edges[edges[:, 3].argsort()]
-        edges = edges[:, 0:2].astype(dtype=int)
-
-    elif dataset in ['email']:
-        with open(raw_file, encoding='utf-8-sig') as f:
-            lines = f.read().splitlines()
-        edges = [[float(r) for r in row.split(',')] for row in lines]
-        edges = np.array(edges)
-        edges = edges[edges[:, 2].argsort()]
-        edges = edges[:, 0:2].astype(dtype=int)
-
-    elif dataset in ['btc_alpha', 'btc_otc']:
-        with open(raw_file) as f:
-            lines = f.read().splitlines()
-        edges = [[float(r) for r in row.split(',')] for row in lines]
-        edges = np.array(edges)
-        edges = edges[edges[:, 3].argsort()]
-        edges = edges[:, 0:2].astype(dtype=int)
-    
-    elif dataset == 'hepth':
-        with open(raw_file) as f:
-            lines = f.read().splitlines()
-        edges = [[float(r) for r in row.split(' ')] for row in lines]    
-        edges = np.array(edges)
-        edges = edges[edges[:, 2].argsort()]
-        edges = edges[:, 0:2].astype(dtype=int)
-
-    for ii in range(len(edges)):
-        x0 = edges[ii][0]
-        x1 = edges[ii][1]
-        if x0 > x1:
-            edges[ii][0] = x1
-            edges[ii][1] = x0
-
-    # edges = edges[np.nonzero([x[0] != x[1] for x in edges])].tolist() #remove self-loop
-    # aa, idx = np.unique(edges, return_index=True, axis=0) #remove duplicate edges
-    edges = np.array(edges)
-    # edges = edges[np.sort(idx)]
-
-    vertexs, edges = np.unique(edges, return_inverse=True)
-    edges = np.reshape(edges, [-1, 2])
-    print('vertex:', len(vertexs), ' edge: ', len(edges))
-    print(edges.max(),edges.min())
-    return edges
-
-def n2v_train(edges, x_dim, device, n, epoch_num):
-    edge_index = torch.LongTensor(edges).t().contiguous()
-    n2v = Node2Vec(edge_index=edge_index, embedding_dim=x_dim,walk_length=25,context_size=25, num_nodes=n).to(device)
-    loader = n2v.loader(batch_size=128, shuffle=True, num_workers=4)
-    optimizer = torch.optim.Adam(list(n2v.parameters()), lr=0.01)
-    def train():
-        n2v.train()
-        total_loss = 0
-        for pos_rw, neg_rw in loader:
-            optimizer.zero_grad()
-            loss = n2v.loss(pos_rw.to(device), neg_rw.to(device))
-            loss.backward()
-            optimizer.step()
-            total_loss += loss.item()
-        return total_loss / len(loader)
-    for epoch in range(1, epoch_num):
-        loss = train()
-        print(f'Epoch: {epoch:02d}, Loss: {loss:.4f}')
-    x = n2v()
-    return x
 
 def generateDataset(dataset, raw_file, device, snap_size, train_per, anomaly_per, noise_ratio, x_dim):
     print('Generating data with anomaly for Dataset: ', dataset)
@@ -163,6 +97,78 @@ def generateDataset(dataset, raw_file, device, snap_size, train_per, anomaly_per
     return data_list, train_size
     
 
+def preprocessDataset(dataset,raw_file):
+    print('Preprocess dataset: ' + dataset)
+    if dataset in ['digg', 'uci', 'as_topology']:
+        edges = np.loadtxt(raw_file, dtype=float, comments='%', delimiter=' ')
+        edges = edges[edges[:, 3].argsort()]
+        edges = edges[:, 0:2].astype(dtype=int)
+
+    elif dataset in ['email']:
+        with open(raw_file, encoding='utf-8-sig') as f:
+            lines = f.read().splitlines()
+        edges = [[float(r) for r in row.split(',')] for row in lines]
+        edges = np.array(edges)
+        edges = edges[edges[:, 2].argsort()]
+        edges = edges[:, 0:2].astype(dtype=int)
+
+    elif dataset in ['btc_alpha', 'btc_otc']:
+        with open(raw_file) as f:
+            lines = f.read().splitlines()
+        edges = [[float(r) for r in row.split(',')] for row in lines]
+        edges = np.array(edges)
+        edges = edges[edges[:, 3].argsort()]
+        edges = edges[:, 0:2].astype(dtype=int)
+    
+    elif dataset == 'hepth':
+        with open(raw_file) as f:
+            lines = f.read().splitlines()
+        edges = [[float(r) for r in row.split(' ')] for row in lines]    
+        edges = np.array(edges)
+        edges = edges[edges[:, 2].argsort()]
+        edges = edges[:, 0:2].astype(dtype=int)
+
+    for ii in range(len(edges)):
+        x0 = edges[ii][0]
+        x1 = edges[ii][1]
+        if x0 > x1:
+            edges[ii][0] = x1
+            edges[ii][1] = x0
+
+    # edges = edges[np.nonzero([x[0] != x[1] for x in edges])].tolist() #remove self-loop
+    # aa, idx = np.unique(edges, return_index=True, axis=0) #remove duplicate edges
+    edges = np.array(edges)
+    # edges = edges[np.sort(idx)]
+
+    vertexs, edges = np.unique(edges, return_inverse=True)
+    edges = np.reshape(edges, [-1, 2])
+    print('vertex:', len(vertexs), ' edge: ', len(edges))
+    print(edges.max(),edges.min())
+    return edges
+
+
+def n2v_train(edges, x_dim, device, n, epoch_num):
+    edge_index = torch.LongTensor(edges).t().contiguous()
+    n2v = Node2Vec(edge_index=edge_index, embedding_dim=x_dim,walk_length=25,context_size=25, num_nodes=n).to(device)
+    loader = n2v.loader(batch_size=128, shuffle=True, num_workers=4)
+    optimizer = torch.optim.Adam(list(n2v.parameters()), lr=0.01)
+    def train():
+        n2v.train()
+        total_loss = 0
+        for pos_rw, neg_rw in loader:
+            optimizer.zero_grad()
+            loss = n2v.loss(pos_rw.to(device), neg_rw.to(device))
+            loss.backward()
+            optimizer.step()
+            total_loss += loss.item()
+        return total_loss / len(loader)
+    for epoch in range(1, epoch_num):
+        loss = train()
+        print(f'Epoch: {epoch:02d}, Loss: {loss:.4f}')
+    x = n2v()
+    return x
+
+
 def anomaly_generation2(ini_graph_percent, anomaly_percent, noise_ratio, data, n, m,seed = 1):
     """ generate anomaly
     split the whole graph into training network which includes parts of the
@@ -217,7 +223,6 @@ def anomaly_generation2(ini_graph_percent, anomaly_percent, noise_ratio, data, n
 def generate_anomaly(raw_data, inject_data, n, m, anomaly_ratio):
     # generate fake edges that are not exist in the whole graph, treat them as
     # anamalies
-    # 真就直接随机生成
     idx_1 = np.expand_dims(np.transpose(np.random.choice(n, m)) , axis=1)
     idx_2 = np.expand_dims(np.transpose(np.random.choice(n, m)) , axis=1)
     fake_edges = np.concatenate((idx_1, idx_2), axis=1)
@@ -225,33 +230,28 @@ def generate_anomaly(raw_data, inject_data, n, m, anomaly_ratio):
     ####### genertate abnormal edges ####
     #fake_edges = np.array([x for x in generate_edges if labels[x[0] - 1] != labels[x[1] - 1]])
 
-    # 移除掉self-loop以及真实边
     fake_edges = processEdges(fake_edges, raw_data)
 
     #anomaly_num = 12#int(np.floor(anomaly_percent * np.size(test, 0)))
-    # 按比例圈定要的异常边
     anomaly_num = int(np.floor(anomaly_ratio * np.size(inject_data, 0)))
     anomalies = fake_edges[0:anomaly_num, :]
 
-    # 按照总边数（测试正常+异常）圈定标签
     labels = np.ones([np.size(inject_data, 0) + anomaly_num, 1], dtype=np.float32)
     # randsample: sample without replacement
     # it's different from datasample!
 
-    # 随机选择异常边的位置
     anomaly_pos = np.random.choice(np.size(labels, 0), anomaly_num, replace=False)
 
     #anomaly_pos = np.random.choice(100, anomaly_num, replace=False)+200
-    # 选定的位置定为0
     labels[anomaly_pos] = 0
 
-    # 汇总数据，按照起点，终点，label的形式填充，并且把对应的idx找出
     synthetic_data = np.concatenate((np.zeros([np.size(labels, 0), 2], dtype=np.float32), labels), axis=1)
     idx_anomalies = np.nonzero(labels.squeeze() == 0)
     idx_normal = np.nonzero(labels.squeeze() == 1)
     synthetic_data[idx_anomalies, 0:2] = anomalies
     synthetic_data[idx_normal, 0:2] = inject_data
     return synthetic_data
+
 
 def processEdges(fake_edges, data):
     """
@@ -282,6 +282,7 @@ def processEdges(fake_edges, data):
             c.append(i)
     fake_edges = np.array(c)
     return fake_edges
+
 
 def add_noise(data, noise_ratio):
     if noise_ratio == 0:

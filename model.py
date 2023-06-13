@@ -162,14 +162,6 @@ class Model(nn.Module):
         self.h_dim = args.h_dim
         self.z_dim = args.z_dim
         self.EPS = 1e-15
-        # self.lamda = args.lamda
-        # self.at_eps = 0.05
-        # self.at_alpha = args.at_alpha
-        # self.gamma = 1
-        # self.vat_alpha = 0.1
-        # self.vat_iter = 1
-        # self.vat_xi = 1e-6
-        # self.vat_eps = 2.5
 
     
     def forward(self, dataloader, y_rect=None, h_t=None):
@@ -232,7 +224,7 @@ class Model(nn.Module):
         kld_loss /= dataloader.__len__()
         nce_loss = self.contrastive(all_z, all_node_idx)
 
-        return bce_loss, reg_loss, recon_loss + kld_loss, nce_loss, next_y_list, h_t, score_list
+        return bce_loss, reg_loss, recon_loss + kld_loss, nce_loss, next_y_list, h_t, score_list, kld_loss
     
     def reset_parameters(self, stdv=1e-1):
         for weight in self.parameters():
@@ -297,7 +289,7 @@ class Model(nn.Module):
         lambda_max,ev = eig_fn(L, k=1, which='LM', return_eigenvectors=True)
         ev = torch.from_numpy(ev)
         return ev 
-
+'''
     # def _l2_normalize(self, d):
     #     size = len(d.size())
     #     d = d.numpy()
@@ -355,28 +347,28 @@ class Model(nn.Module):
     #     y_e = self.fcc(edge_rep).squeeze()
     #     vat_loss = self.vat_alpha * self._kl_with_logit(y_e, y_f.detach())
     #     return vat_loss
-    '''
-    def _cal_vat_loss(self, neg_index, z, logits):
-        node_emb = z
-        noise = node_emb.data.new(node_emb.size()).normal_(0, 1)*1e-5
-        noise.requires_grad_()
-        new_node_emb = node_emb.data.detach() + noise
-        neg_rep = new_node_emb[neg_index[0]] + new_node_emb[neg_index[1]]
-        vat_score = self.fcc(neg_rep).squeeze()
-        vat_loss = self._kl_with_logit(vat_score, logits.detach())        
-        vat_grad = grad(vat_loss, noise, retain_graph=True)[0]
-        #norm = vat_grad.norm()
+   
+    # def _cal_vat_loss(self, neg_index, z, logits):
+    #     node_emb = z
+    #     noise = node_emb.data.new(node_emb.size()).normal_(0, 1)*1e-5
+    #     noise.requires_grad_()
+    #     new_node_emb = node_emb.data.detach() + noise
+    #     neg_rep = new_node_emb[neg_index[0]] + new_node_emb[neg_index[1]]
+    #     vat_score = self.fcc(neg_rep).squeeze()
+    #     vat_loss = self._kl_with_logit(vat_score, logits.detach())        
+    #     vat_grad = grad(vat_loss, noise, retain_graph=True)[0]
+    #     #norm = vat_grad.norm()
         
-        noise = noise + vat_grad * self.vat_xi
-        noise = torch.FloatTensor(self.vat_eps * self._l2_normalize(noise.data.cpu()))
-        noise = Variable(noise.to(self.device))
-        node_emb = node_emb + noise.detach()
-        neg_rep = node_emb[neg_index[0]] + node_emb[neg_index[1]]
-        vat_score = self.fcc(neg_rep).squeeze()
-        self.zero_grad()
-        vat_loss = self.vat_alpha * self._kl_with_logit(vat_score, logits.detach())
-        return vat_loss
-    '''
+    #     noise = noise + vat_grad * self.vat_xi
+    #     noise = torch.FloatTensor(self.vat_eps * self._l2_normalize(noise.data.cpu()))
+    #     noise = Variable(noise.to(self.device))
+    #     node_emb = node_emb + noise.detach()
+    #     neg_rep = node_emb[neg_index[0]] + node_emb[neg_index[1]]
+    #     vat_score = self.fcc(neg_rep).squeeze()
+    #     self.zero_grad()
+    #     vat_loss = self.vat_alpha * self._kl_with_logit(vat_score, logits.detach())
+    #     return vat_loss
+'''  
         
         
 
@@ -405,4 +397,3 @@ class MLP(nn.Module):
     def forward(self, x):
         return self.project(x)
     
-

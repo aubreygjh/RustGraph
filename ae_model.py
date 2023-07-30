@@ -8,6 +8,7 @@ from torch.autograd import Variable, grad
 from torch_geometric.nn import SAGEConv,GATConv,InnerProductDecoder
 from torch_geometric.utils import negative_sampling, remove_self_loops, add_self_loops, get_laplacian, to_scipy_sparse_matrix, is_undirected
 from scipy.sparse.linalg import eigs, eigsh
+from utils import plot_tsne
 
 
 class GConv(nn.Module):
@@ -82,6 +83,7 @@ class Generative(nn.Module):
         self.enc = GConv(h_dim + h_dim, h_dim, device=device, act=F.relu)
         self.enc_mean = GConv(h_dim, z_dim, device=device)
         self.enc_std = GConv(h_dim, z_dim, device=device, act=F.softplus)
+        self.enc_z = GConv(h_dim, z_dim, device=device, act=F.softplus)
         
         self.prior = nn.Sequential(nn.Linear(h_dim+1, h_dim), nn.ReLU())
         self.prior_mean = nn.Sequential(nn.Linear(h_dim, z_dim))
@@ -94,17 +96,17 @@ class Generative(nn.Module):
     def forward(self, x, h, diff, edge_index):
         phiX = self.phi_x(x)
         enc_x = self.enc(torch.cat([phiX, h[-1]], 1), edge_index)
-        enc_x_mean = self.enc_mean(enc_x, edge_index)
-        enc_x_std = self.enc_std(enc_x, edge_index)
-        prior_x = self.prior(torch.cat([h[-1], diff], 1))
-        # prior_x = torch.randn(prior_x.shape).cuda()
-        prior_x_mean = self.prior_mean(prior_x)
-        prior_x_std = self.prior_std(prior_x)
-        z = self.random_sample(enc_x_mean, enc_x_std)
+        # enc_x_mean = self.enc_mean(enc_x, edge_index)
+        # enc_x_std = self.enc_std(enc_x, edge_index)
+        # prior_x = self.prior(torch.cat([h[-1], diff], 1))
+        # prior_x_mean = self.prior_mean(prior_x)
+        # prior_x_std = self.prior_std(prior_x)
+        # z = self.random_sample(enc_x_mean, enc_x_std)
+        z = self.enc_z(enc_x, edge_index)
         phiZ = self.phi_z(z)
         h_out = self.rnn(torch.cat([phiX, phiZ], 1), edge_index, h)
         
-        return (prior_x_mean, prior_x_std), (enc_x_mean, enc_x_std), z, h_out
+        return z, h_out
     
     def random_sample(self, mean, std):
         eps1 = torch.FloatTensor(std.size()).normal_().to(self.device)
@@ -146,9 +148,9 @@ class Contrastive(nn.Module):
             return torch.mm(z1, z2.t())       
                 
 
-class Model(nn.Module):
+class AE_Model(nn.Module):
     def __init__(self, args):
-        super(Model, self).__init__()
+        super(AE_Model, self).__init__()
         self.encoder = Generative(args.x_dim, args.h_dim, args.z_dim, args.layer_num, args.device)
         self.contrastive = Contrastive(args.device, args.z_dim, args.window)
         self.dec = InnerProductDecoder()
@@ -164,7 +166,7 @@ class Model(nn.Module):
         self.EPS = 1e-15
 
     
-    def forward(self, dataloader, y_rect=None, h_t=None):
+    def forward(self, dataloader, y_rect=None, h_t=None,epoch=1):
         kld_loss = 0
         recon_loss = 0
         reg_loss = 0
@@ -191,16 +193,20 @@ class Model(nn.Module):
                 diff = torch.abs(torch.sub(ev, pre_ev)).to(self.device)
             pre_ev = ev
             
-            (prior_mean_t, prior_std_t), (enc_mean_t, enc_std_t), z_t, h_t = self.encoder(x, h_t, diff, edge_index)
+            z_t, h_t = self.encoder(x, h_t, diff, edge_index)
 
-            enc_mean_t_sl = enc_mean_t[node_index, :]
-            enc_std_t_sl = enc_std_t[node_index, :]
-            prior_mean_t_sl = prior_mean_t[node_index, :]
-            prior_std_t_sl = prior_std_t[node_index, :]
+            # enc_mean_t_sl = enc_mean_t[node_index, :]
+            # enc_std_t_sl = enc_std_t[node_index, :]
+            # prior_mean_t_sl = prior_mean_t[node_index, :]
+            # prior_std_t_sl = prior_std_t[node_index, :]
             h_t_sl = h_t[-1, node_index, :]
             
             edge_emb = z_t[edge_index[0]] + z_t[edge_index[1]]
             edge_score = self.fcc(edge_emb)
+
+            # if epoch in [0, 199, 399]:
+            #     if t in [0, len(dataloader)//2, len(dataloader)-1]:
+            #         plot_tsne(edge_emb, data.y.unsqueeze(1).float(),epoch,t)
 
             if t == 0:
                 bce_loss = F.binary_cross_entropy(edge_score, y, reduction='none')
@@ -211,7 +217,7 @@ class Model(nn.Module):
             label_rectifier = label_rectifier.unsqueeze(1)
             next_y_list.append((0.9*y+0.1*label_rectifier).detach())
             reg_loss += torch.norm(label_rectifier-edge_score, dim=1, p=2).mean()#0异常 1正常
-            kld_loss += self._kld_gauss(enc_mean_t_sl, enc_std_t_sl, prior_mean_t_sl, prior_std_t_sl)
+            # kld_loss += self._kld_gauss(enc_mean_t_sl, enc_std_t_sl, prior_mean_t_sl, prior_std_t_sl)
             recon_loss += self._recon_loss(z_t, x, edge_index) 
             
             all_z.append(z_t)
@@ -221,10 +227,9 @@ class Model(nn.Module):
         bce_loss = bce_loss.squeeze() 
         reg_loss /= dataloader.__len__()
         recon_loss /= dataloader.__len__()
-        kld_loss /= dataloader.__len__()
+        # kld_loss /= dataloader.__len__()
         nce_loss = self.contrastive(all_z, all_node_idx)
-
-        return bce_loss, reg_loss, recon_loss + kld_loss, nce_loss, next_y_list, h_t, score_list
+        return bce_loss, reg_loss, recon_loss, nce_loss, next_y_list, h_t, score_list
     
     def reset_parameters(self, stdv=1e-1):
         for weight in self.parameters():

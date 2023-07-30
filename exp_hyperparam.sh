@@ -11,6 +11,13 @@ then
         for b in "${b_lst[@]}"; do
             CUDA_VISIBLE_DEVICES=0 python main.py --dataset "uci" --snap_size 1000 --train_ratio 0.5 --anomaly_ratio 0.1  \
             --epoch 200 --lr 0.001 --x_dim 128 --h_dim 128 --z_dim 128   \
+            --bce_weight 1 --reg_weight 1 --gen_weight $a --con_weight $b
+        done
+    done
+    for a in "${a_lst[@]}"; do
+        for b in "${b_lst[@]}"; do
+            CUDA_VISIBLE_DEVICES=0 python main.py --dataset "uci" --snap_size 1000 --train_ratio 0.5 --anomaly_ratio 0.1  \
+            --epoch 200 --lr 0.001 --x_dim 128 --h_dim 128 --z_dim 128   \
             --bce_weight $a --reg_weight $b --gen_weight 1
         done
     done

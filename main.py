@@ -11,6 +11,7 @@ from torch.utils.tensorboard import SummaryWriter
 from sklearn.metrics import roc_auc_score
 from utils import *
 from model import  Model
+from ae_model import AE_Model
 from dataset import  DynamicGraphAnomaly
 '''
 def update_reduce_step(cur_step, num_gradual, tau=0.5):
@@ -81,7 +82,7 @@ if __name__ == '__main__':
     for data in data_test:
         y = data.y
         test_labels.append(y.tolist())
-    test_labels = np.array(test_labels)
+    # test_labels = np.array(test_labels)
 
     #Start Training
     print("Now begin training!")
@@ -96,8 +97,7 @@ if __name__ == '__main__':
     y_new = None
     for epoch in tqdm(range(args.epochs)):
         with torch.autograd.set_detect_anomaly(True):
-            bce_loss, reg_loss, gen_loss, con_loss, y_new, h_t, _, kld_loss = model(data_train, y_rect=y_new)
-            
+            bce_loss, reg_loss, gen_loss, con_loss, y_new, h_t, _ = model(data_train, y_rect=y_new)
             loss = bce_loss.mean()
             loss = args.bce_weight * loss + args.reg_weight * reg_loss + args.gen_weight * gen_loss + args.con_weight * con_loss
             optimizer.zero_grad()
@@ -105,11 +105,10 @@ if __name__ == '__main__':
             torch.nn.utils.clip_grad_norm_(model.parameters(), 10)
             optimizer.step()
 
-
         if (epoch+1) % 5 == 0 or epoch == args.epochs-1:
             model.eval()
             with torch.no_grad():
-                _, _, _, _, _,_, score_list,_ = model(data_test, h_t=h_t)
+                _, _, _, _, _,_, score_list = model(data_test, h_t=h_t)
             score_all = []
             label_all = []
 
@@ -140,13 +139,14 @@ if __name__ == '__main__':
         tb.add_scalar('reg_loss', reg_loss.item(), epoch)
         tb.add_scalar('gen_loss', gen_loss.item(), epoch)
         tb.add_scalar('con_loss', con_loss.item(), epoch)
-        tb.add_scalar('KL divergence', kld_loss.item(), epoch)
+        # tb.add_scalar('KL divergence', kld_loss.item(), epoch)
+        # tb.add_scalar('Reconstruction loss', recon_loss.item(), epoch)
         tb.add_scalar('loss', loss.item(), epoch)
 
     tb.close()
     log.writelines(f"MAX AUC: {max_auc:.4f} in epoch: {max_epoch},\t")
     log.writelines(f"Last AUC: {auc_all:.4f}\n")
     print(f'\n Total Training Rime:{(time.time()-load_time):.4f}')
-    # torch.save(model1.state_dict(), model_file)
+    # torch.save(model.state_dict(), model_file)
     print(f"MAX AUC: {max_auc:.4f} in epoch: {max_epoch}")
     

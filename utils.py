@@ -3,9 +3,14 @@
 
 import argparse
 import os
-# import networkx as nx
-# import matplotlib.pyplot as plt  
+from sklearn.manifold import TSNE
+import numpy as np
+import networkx as nx
+import matplotlib.pyplot as plt  
+from torch_geometric.utils import homophily, assortativity, to_networkx
+from dataset import  DynamicGraphAnomaly
 
+'''
 # #visualize graphs
 # for i,graph in enumerate(data):
 #     draw(graph.edge_index, graph.y, i)
@@ -26,7 +31,197 @@ import os
 #         os.mkdir('figs')
 #     plt.savefig('figs/{}.png'.format(name if name else 'path'))
 #     print(f'Saved fig-{name}.')
+'''
+
+
+
+def plot_tsne(edge_emb, y, epoch, t):
+    # Normalize edge_emb
+    edge_emb_normalized = (edge_emb - edge_emb.mean(dim=0)) / edge_emb.std(dim=0)
+
+    # Apply T-SNE
+    tsne = TSNE(n_components=2)
+    edge_emb_tsne = tsne.fit_transform(edge_emb_normalized.detach().cpu().numpy())
+
+    # Get the labels
+    classes = y.detach().cpu().numpy() 
+    unique_classes = np.unique(classes)
+
+    # Plot the results
+    plt.figure(figsize=(8, 6))
+    plt.scatter(edge_emb_tsne[:, 0], edge_emb_tsne[:, 1], c=classes)
+
+    plt.title("T-SNE Visualization of edge_emb")
+    # plt.xlabel("Dimension 1")
+    # plt.ylabel("Dimension 2")
+    # Create a legend with labels
+    plt.legend()
+
+    plt.savefig(f'tsne_{epoch}_{t}.pdf')
+    plt.show()
+
+
+
+def get_properties(datasets):
+    # Empty lists to store clustering coefficients and densities for each dataset
+    dataset_clustering_coeffs = []
+    dataset_densities = []
+    dataset_assortativity_coeffs = []
+    dataset_transitivity = []
+    dataset_connected_components = []
+    dsnames = ['UCI', 'Digg', 'BTC-Alpha', 'BTC-OTC', 'Email', 'AS-Topology']
+
+    # Iterate over each dataset
+    for dataset in datasets:
+        # Empty lists to store clustering coefficients and densities for the current dataset
+        clustering_coeffs = []
+        densities = []
+        assortativity_coeffs = []
+        transitivity = []
+        connected_components = []
+
+        # Iterate over each graph in the current dataset
+        for data in dataset:
+            # Convert to NetworkX graph
+            graph = to_networkx(data)
+
+            # Compute clustering coefficient
+            clustering_coefficient = nx.average_clustering(graph)
+            clustering_coeffs.append(clustering_coefficient)
+
+            # Compute density
+            density = nx.density(graph)
+            densities.append(density)
+
+            # Compute assortativity coefficient
+            assortativity_coefficient = nx.degree_assortativity_coefficient(graph)
+            assortativity_coeffs.append(assortativity_coefficient)
+
+            # Compute transitivity
+            transitivity_coefficient = nx.transitivity(graph)
+            transitivity.append(transitivity_coefficient)
+
+            # Compute number of connected components
+            connected_components.append(nx.number_connected_components(graph.to_undirected()))
+
+
+        # Store the clustering coefficients, densities, assortativity coefficients, and transitivity for the current dataset
+        dataset_clustering_coeffs.append(clustering_coeffs)
+        dataset_densities.append(densities)
+        dataset_assortativity_coeffs.append(assortativity_coeffs)
+        dataset_transitivity.append(transitivity)
+        dataset_connected_components.append(connected_components)
+
+    # Plot the clustering coefficient, density, assortativity, and transitivity curves in the same figure with subplots
+    # plt.rcParams['font.family'] = ['Times New Roman']
+    # plt.grid(linestyle='--') 
+    # fontdict = {'family':'Times New Roman'}
+    fig, axs = plt.subplots(2, 2, figsize=(8, 8))
+
+    # Plot the clustering coefficient curves for each dataset
+    ax = axs[0][0]
+    for i, clustering_coeffs in enumerate(dataset_clustering_coeffs):
+        if i == 0:
+            ax.plot(range(min(len(clustering_coeffs), 50)), clustering_coeffs[:50], label=dsnames[i])
+        else:
+            ax.plot(range(len(clustering_coeffs)), clustering_coeffs, label=dsnames[i])
+    ax.set_xlabel('Snapshots')
+    ax.set_ylabel('Clustering Coefficient')
+    ax.set_title('Clustering Coefficient Curves',fontsize=10)
+
+    # Plot the density curves for each dataset
+    ax = axs[0][1]
+    for i, densities in enumerate(dataset_densities):
+        if i == 0:
+            ax.plot(range(min(len(densities), 50)), densities[:50], label=dsnames[i])
+        else:
+            ax.plot(range(len(densities)), densities, label=dsnames[i])
+    ax.set_xlabel('Snapshots')
+    ax.set_ylabel('Density')
+    ax.set_title('Density Curves',fontsize=10)
+
+    # # Plot the assortativity coefficient curves for each dataset
+    # for i, assortativity_coeffs in enumerate(dataset_assortativity_coeffs):
+    #     if i == 0:
+    #         axs[2].plot(range(min(len(assortativity_coeffs), 50)), assortativity_coeffs[:50], label=dsnames[i])
+    #     else:
+    #         axs[2].plot(range(len(assortativity_coeffs)), assortativity_coeffs, label=dsnames[i])
+    # axs[2].set_xlabel('Snapshots')
+    # axs[2].set_ylabel('Assortativity Coefficient')
+    # axs[2].set_title('Assortativity Coefficient Curves')
+
+    # Plot the transitivity curves for each dataset
+    ax = axs[1][0]
+    for i, transitivity in enumerate(dataset_transitivity):
+        if i == 0:
+            ax.plot(range(min(len(transitivity), 50)), transitivity[:50], label=dsnames[i])
+        else:
+            ax.plot(range(len(transitivity)), transitivity, label=dsnames[i])
+    ax.set_xlabel('Snapshots')
+    ax.set_ylabel('Transitivity')
+    ax.set_title('Transitivity Curves',fontsize=10)
+
+    # Plot the Connected Components curves for each dataset
+    ax = axs[1][1]
+    for i, connected_components in enumerate(dataset_connected_components):
+        if i == 0:
+            ax.plot(range(min(len(connected_components), 50)), connected_components[:50], label=dsnames[i])
+        else:
+            ax.plot(range(len(connected_components)), connected_components, label=dsnames[i])
+    ax.set_xlabel('Snapshots')
+    ax.set_ylabel('Connected Components')
+    ax.set_title('Connected Components Curves',fontsize=10)
+    ax.legend()
+ 
+    # Adjust the spacing between subplots
+    plt.tight_layout()
+    # Save the figure as a PDF file in the current directory
+    plt.savefig('time_vairant_properties.pdf')
+    # Display the figure
+    plt.show()
     
+
+def visualize_topology(datasets):
+    # Iterate over each dataset
+    dsnames = ['UCI Messages', 'Bitcoin-Alpha', 'Bitcoin-OTC', 'Emain-DNC'] #'Digg', 'AS-Topology'
+
+    for i, dataset in enumerate(datasets):
+        dataset_name = dsnames[i]
+
+        # Get the first, middle, and last snapshots from the dataset
+        num_snapshots = len(dataset)
+        first_snapshot = dataset[0]
+        middle_snapshot = dataset[num_snapshots // 2]
+        last_snapshot = dataset[-1]
+        
+        # Convert to NetworkX graphs
+        first_graph = to_networkx(first_snapshot)
+        middle_graph = to_networkx(middle_snapshot)
+        last_graph = to_networkx(last_snapshot)
+ 
+        # Create subplots for the topology visualization
+        fig, axs = plt.subplots(1, 3, figsize=(15, 5))
+
+        # Plot the first snapshot
+        axs[0].set_title(f"{dataset_name} - First Snapshot")
+        nx.draw(first_graph, ax=axs[0], node_size=10, node_color='blue', edge_color='gray', with_labels=False)
+
+        # Plot the middle snapshot
+        axs[1].set_title(f"{dataset_name} - Middle Snapshot")
+        nx.draw(middle_graph, ax=axs[1], node_size=10, node_color='blue', edge_color='gray', with_labels=False)
+
+        # Plot the last snapshot
+        axs[2].set_title(f"{dataset_name} - Last Snapshot")
+        nx.draw(last_graph, ax=axs[2], node_size=10, node_color='blue', edge_color='gray', with_labels=False)
+
+        # Adjust the spacing between subplots
+        plt.tight_layout()
+        # Save the figure as a PDF with the name of the corresponding dataset
+        plt.savefig(f"{dataset_name}_topology.pdf")
+        # Display the figure
+        plt.show()
+
+
 def str2bool(v):
     if isinstance(v, bool):
         return v
@@ -98,3 +293,24 @@ def exp_details(args):
     print(f'    Timestamp:{args.timestamp}\n')
 
     return
+
+if __name__ == '__main__':
+    #Init dataloader
+    args = args_parser()
+    datasets = ['uci', 'digg', 'btc_alpha', 'btc_otc', 'email', 'as_topology'] # ，
+    graphs = []
+    for dsname in datasets:
+        if dsname == 'email':
+            args.x_dim = 512
+        elif dsname == 'as_topology':
+            args.x_dim = 64
+        else:
+            args.x_dim = 128
+        dataset = DynamicGraphAnomaly(root='dataset', name=dsname, args=args)
+        graphs.append(dataset[:])
+
+    # get_properties(graphs)
+    # visualize_topology(graphs)
+
+    # run this command to visualize:
+    # CUDA_VISIBLE_DEVICES=5 python utils.py  --snap_size 1000 --train_ratio 0.5 --anomaly_ratio 0.1 --noise_ratio 0  --epoch 200 --lr 0.001 --x_dim 128 --h_dim 128 --z_dim 128 

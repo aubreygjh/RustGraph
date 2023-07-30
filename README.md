@@ -1,25 +1,23 @@
-# RustGraph
-To reproduce the results in the paper, execute `bash run.sh`
-## Requirements
-python==3.9
-pytorch
-pytorch-geometric
-tensorboard
-networkx
-matplotlib
-## 0. Python environment setup with Conda
-```
-conda create --name TAPE python=3.8
-conda activate TAPE
+# RustGraph: Robust Anomaly Detection in Dynamic Graphs by Jointly Learning Structural-Temporal Dependency
 
-conda install pytorch==1.12.1 torchvision==0.13.1 torchaudio==0.12.1 cudatoolkit=11.3 -c pytorch
-conda install -c pyg pytorch-sparse
-conda install -c pyg pytorch-scatter
-conda install -c pyg pytorch-cluster
-conda install -c pyg pyg
-pip install ogb
-conda install -c dglteam/label/cu113 dgl
-pip install yacs
-pip install transformers
-pip install --upgrade accelerate
+<img src="framework.pdf">
+
+
+## Requirements
 ```
+python==3.9
+pytorch==1.12.1
+pytorch-geometric==2.3.0
+tensorboard==2.6.0
+networkx==3.1
+matplotlib==3.7.1
+```
+
+## Reproducibility
+To reproduce the main results in the paper (Section 5.2), execute `bash run.sh $DATASET`
+
+To reproduce the results of noisy labels (Section 5.4), execute `bash exp_noise_ratio.sh $DATASET`
+
+To reproduce the results of sensitivity analysis (Section 5.5), execute `bash exp_emb_dim.sh $DATASET`, `bash exp_train_ratio.sh $DATASET`, `bash exp_hyperparam.sh $DATASET`
+
+

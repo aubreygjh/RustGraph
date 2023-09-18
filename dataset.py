@@ -14,7 +14,7 @@ class DynamicGraphAnomaly(InMemoryDataset):
             'enron':''}
     def __init__(self, root, name, args, transform=None, pre_transform=None, pre_filter=None):
         self.dataset = name
-        self.name = name + "_" + str(args.anomaly_ratio) + "_" + str(args.train_ratio) + "_" + str(args.noise_ratio) + "_" + str(args.x_dim)
+        self.name = name + "_" + str(args.anomaly_ratio) + "_" + str(args.train_ratio) + "_" + str(args.noise_ratio) + "_" + str(args.x_dim) #+ "_" + str(args.snap_size)
         self.snap_size = args.snap_size
         self.train_ratio = args.train_ratio
         self.anomaly_ratio = args.anomaly_ratio

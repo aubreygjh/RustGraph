@@ -1,6 +1,5 @@
 # RustGraph: Robust Anomaly Detection in Dynamic Graphs by Jointly Learning Structural-Temporal Dependency
 
-<img src="framework.pdf">
 
 
 ## Requirements

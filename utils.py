@@ -117,61 +117,67 @@ def get_properties(datasets):
     # plt.grid(linestyle='--') 
     # fontdict = {'family':'Times New Roman'}
     fig, axs = plt.subplots(2, 2, figsize=(8, 8))
+    line_styles = ['-', '--', '-.', ':']
+    markers = ['o', 's', '^', 'D', 'v', 'p']
+    curve_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
 
-    # Plot the clustering coefficient curves for each dataset
-    ax = axs[0][0]
-    for i, clustering_coeffs in enumerate(dataset_clustering_coeffs):
+    for i, ax in enumerate(axs.flat):
+        # line_style_counter = i % len(line_styles)
+        # marker_counter = i % len(markers)
+        
+        # Plot the clustering coefficient curves for each dataset
         if i == 0:
-            ax.plot(range(min(len(clustering_coeffs), 50)), clustering_coeffs[:50], label=dsnames[i])
-        else:
-            ax.plot(range(len(clustering_coeffs)), clustering_coeffs, label=dsnames[i])
-    ax.set_xlabel('Snapshots')
-    ax.set_ylabel('Clustering Coefficient')
-    ax.set_title('Clustering Coefficient Curves',fontsize=10)
+            ax.set_xlabel('Snapshots')
+            ax.set_ylabel('Clustering Coefficient')
+            ax.set_title('Clustering Coefficient Curves', fontsize=10)
+            for j, clustering_coeffs in enumerate(dataset_clustering_coeffs):
+                line_style = line_styles[j % len(line_styles)]
+                marker = markers[j % len(markers)]  # Use a different marker for each curve
+                color = curve_colors[j % len(curve_colors)]
+                ax.plot(range(min(len(clustering_coeffs), 50)), clustering_coeffs[:50], label=dsnames[j], linestyle=line_style, color=color)
+                ax.scatter([0, len(clustering_coeffs[:50]) - 1], [clustering_coeffs[0], clustering_coeffs[len(clustering_coeffs[:50]) - 1]], marker=marker, color=color, label=None)
+        
+        # Plot the density curves for each dataset
+        elif i == 1:
+            ax.set_xlabel('Snapshots')
+            ax.set_ylabel('Density')
+            ax.set_title('Density Curves', fontsize=10)
+            for j, densities in enumerate(dataset_densities):
+                line_style = line_styles[j % len(line_styles)]
+                marker = markers[j % len(markers)]  # Use a different marker for each curve
+                color = curve_colors[j % len(curve_colors)]
+                ax.plot(range(min(len(densities), 50)), densities[:50], label=dsnames[j], linestyle=line_style, color=color)
+                ax.scatter([0, len(densities[:50]) - 1], [densities[0], densities[len(densities[:50]) - 1]], marker=marker, color=color, label=None)
 
-    # Plot the density curves for each dataset
-    ax = axs[0][1]
-    for i, densities in enumerate(dataset_densities):
-        if i == 0:
-            ax.plot(range(min(len(densities), 50)), densities[:50], label=dsnames[i])
-        else:
-            ax.plot(range(len(densities)), densities, label=dsnames[i])
-    ax.set_xlabel('Snapshots')
-    ax.set_ylabel('Density')
-    ax.set_title('Density Curves',fontsize=10)
+        # Plot the transitivity curves for each dataset
+        elif i == 2:
+            ax.set_xlabel('Snapshots')
+            ax.set_ylabel('Transitivity')
+            ax.set_title('Transitivity Curves', fontsize=10)
+            for j, transitivity in enumerate(dataset_transitivity):
+                line_style = line_styles[j % len(line_styles)]
+                marker = markers[j % len(markers)]  # Use a different marker for each curve
+                color = curve_colors[j % len(curve_colors)]
+                ax.plot(range(min(len(transitivity), 50)), transitivity[:50], label=dsnames[j], linestyle=line_style, color=color)
+                ax.scatter([0, len(transitivity[:50]) - 1], [transitivity[0], transitivity[len(transitivity[:50]) - 1]], marker=marker, color=color, label=None)
 
-    # # Plot the assortativity coefficient curves for each dataset
-    # for i, assortativity_coeffs in enumerate(dataset_assortativity_coeffs):
-    #     if i == 0:
-    #         axs[2].plot(range(min(len(assortativity_coeffs), 50)), assortativity_coeffs[:50], label=dsnames[i])
-    #     else:
-    #         axs[2].plot(range(len(assortativity_coeffs)), assortativity_coeffs, label=dsnames[i])
-    # axs[2].set_xlabel('Snapshots')
-    # axs[2].set_ylabel('Assortativity Coefficient')
-    # axs[2].set_title('Assortativity Coefficient Curves')
+        # Plot the Connected Components curves for each dataset
+        elif i == 3:
+            ax.set_xlabel('Snapshots')
+            ax.set_ylabel('Connected Components')
+            ax.set_title('Connected Components Curves', fontsize=10)
+            for j, connected_components in enumerate(dataset_connected_components):
+                line_style = line_styles[j % len(line_styles)]
+                marker = markers[j % len(markers)]  # Use a different marker for each curve
+                color = curve_colors[j % len(curve_colors)]
+                ax.plot(range(min(len(connected_components), 50)), connected_components[:50], label=dsnames[j], linestyle=line_style, color=color)
+                ax.scatter([0, len(connected_components[:50]) - 1], [connected_components[0], connected_components[len(connected_components[:50]) - 1]], marker=marker, color=color, label=None)
+                
+        # Cycle through line styles for each subplot
+        # line_style_counter = (line_style_counter + 1) % len(line_styles)
 
-    # Plot the transitivity curves for each dataset
-    ax = axs[1][0]
-    for i, transitivity in enumerate(dataset_transitivity):
-        if i == 0:
-            ax.plot(range(min(len(transitivity), 50)), transitivity[:50], label=dsnames[i])
-        else:
-            ax.plot(range(len(transitivity)), transitivity, label=dsnames[i])
-    ax.set_xlabel('Snapshots')
-    ax.set_ylabel('Transitivity')
-    ax.set_title('Transitivity Curves',fontsize=10)
-
-    # Plot the Connected Components curves for each dataset
-    ax = axs[1][1]
-    for i, connected_components in enumerate(dataset_connected_components):
-        if i == 0:
-            ax.plot(range(min(len(connected_components), 50)), connected_components[:50], label=dsnames[i])
-        else:
-            ax.plot(range(len(connected_components)), connected_components, label=dsnames[i])
-    ax.set_xlabel('Snapshots')
-    ax.set_ylabel('Connected Components')
-    ax.set_title('Connected Components Curves',fontsize=10)
-    ax.legend()
+    # Add a legend to the first subplot
+    axs[1][1].legend()
  
     # Adjust the spacing between subplots
     plt.tight_layout()
@@ -309,7 +315,7 @@ if __name__ == '__main__':
         dataset = DynamicGraphAnomaly(root='dataset', name=dsname, args=args)
         graphs.append(dataset[:])
 
-    # get_properties(graphs)
+    get_properties(graphs)
     # visualize_topology(graphs)
 
     # run this command to visualize:

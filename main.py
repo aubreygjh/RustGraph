@@ -133,7 +133,7 @@ if __name__ == '__main__':
             #     log.writelines("\n")
             
             tb.add_scalar('auc_all', auc_all.item(), epoch)
-            print(f"overall AUC: {auc_all:.4f}")
+            # print(f"overall AUC: {auc_all:.4f}")
 
         tb.add_scalar('bce_loss', bce_loss.mean().item(), epoch)
         tb.add_scalar('reg_loss', reg_loss.item(), epoch)

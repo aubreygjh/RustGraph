@@ -69,6 +69,7 @@ def get_properties(datasets):
     dataset_assortativity_coeffs = []
     dataset_transitivity = []
     dataset_connected_components = []
+    dataset_degrees = []
     dsnames = ['UCI', 'Digg', 'BTC-Alpha', 'BTC-OTC', 'Email', 'AS-Topology']
 
     # Iterate over each dataset
@@ -79,6 +80,7 @@ def get_properties(datasets):
         assortativity_coeffs = []
         transitivity = []
         connected_components = []
+        degrees = []
 
         # Iterate over each graph in the current dataset
         for data in dataset:
@@ -105,26 +107,27 @@ def get_properties(datasets):
             connected_components.append(nx.number_connected_components(graph.to_undirected()))
 
 
+            # Calculate the average degree
+            degree = dict(nx.degree(graph))
+            average_degree = sum(degree.values()) / len(degree)
+            degrees.append(average_degree)
+        print(np.mean(connected_components))
+
         # Store the clustering coefficients, densities, assortativity coefficients, and transitivity for the current dataset
         dataset_clustering_coeffs.append(clustering_coeffs)
         dataset_densities.append(densities)
         dataset_assortativity_coeffs.append(assortativity_coeffs)
         dataset_transitivity.append(transitivity)
         dataset_connected_components.append(connected_components)
+        dataset_degrees.append(degrees)
 
     # Plot the clustering coefficient, density, assortativity, and transitivity curves in the same figure with subplots
-    # plt.rcParams['font.family'] = ['Times New Roman']
-    # plt.grid(linestyle='--') 
-    # fontdict = {'family':'Times New Roman'}
     fig, axs = plt.subplots(2, 2, figsize=(8, 8))
     line_styles = ['-', '--', '-.', ':']
     markers = ['o', 's', '^', 'D', 'v', 'p']
     curve_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
 
-    for i, ax in enumerate(axs.flat):
-        # line_style_counter = i % len(line_styles)
-        # marker_counter = i % len(markers)
-        
+    for i, ax in enumerate(axs.flat):        
         # Plot the clustering coefficient curves for each dataset
         if i == 0:
             ax.set_xlabel('Snapshots')
@@ -172,13 +175,20 @@ def get_properties(datasets):
                 color = curve_colors[j % len(curve_colors)]
                 ax.plot(range(min(len(connected_components), 50)), connected_components[:50], label=dsnames[j], linestyle=line_style, color=color)
                 ax.scatter([0, len(connected_components[:50]) - 1], [connected_components[0], connected_components[len(connected_components[:50]) - 1]], marker=marker, color=color, label=None)
+
+        # elif i == 3:
+        #     ax.set_xlabel('snapshots')
+        #     ax.set_ylabel('degrees')
+        #     ax.set_title('degrees',fontsize=10)
+        #     for j, assortativity_coefficient in enumerate(dataset_degrees):
+        #         line_style = line_styles[j % len(line_styles)]
+        #         marker = markers[j % len(markers)]  # Use a different marker for each curve
+        #         color = curve_colors[j % len(curve_colors)]
+        #         ax.plot(range(min(len(assortativity_coefficient),50)), assortativity_coefficient[:50],label=dsnames[j],linestyle=line_style,color=color)
                 
-        # Cycle through line styles for each subplot
-        # line_style_counter = (line_style_counter + 1) % len(line_styles)
 
     # Add a legend to the first subplot
     axs[1][1].legend()
- 
     # Adjust the spacing between subplots
     plt.tight_layout()
     # Save the figure as a PDF file in the current directory
@@ -189,7 +199,7 @@ def get_properties(datasets):
 
 def visualize_topology(datasets):
     # Iterate over each dataset
-    dsnames = ['UCI Messages', 'Bitcoin-Alpha', 'Bitcoin-OTC', 'Emain-DNC'] #'Digg', 'AS-Topology'
+    dsnames = ['Digg', 'AS-Topology'] #'UCI Messages', 'Bitcoin-Alpha', 'Bitcoin-OTC', 'Emain-DNC'
 
     for i, dataset in enumerate(datasets):
         dataset_name = dsnames[i]
